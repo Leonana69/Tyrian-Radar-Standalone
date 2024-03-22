@@ -58,6 +58,12 @@ namespace Radar
             {
                 Language.English, new Dictionary<string, string>
                 {
+                    { "radar_base_settings", "Base Settings" },
+                    { "radar_advanced_settings", "Advanced Settings" },
+                    { "radar_color_settings", "Color Settings" },
+                    { "radar_radar_settings", "Radar Settings" },
+                    { "language", "Language" },
+                    { "language_info", "Preferred language, if not available will tried English" },
                     { "radar_enable", "Radar Enabled" },
                     { "radar_enable_shortcut", "Short cut for enable/disable radar" },
                     { "radar_pulse_enable", "Radar Pulse Enabled" },
@@ -96,12 +102,18 @@ namespace Radar
                     { "radar_bear_blip_color", "BEAR Color" },
                     { "radar_corpse_blip_color", "Corpse Color" },
                     { "radar_loot_blip_color", "Loot Color" },
-                    { "radar_background_blip_color", "Background Color" },
+                    { "radar_background_blip_color", "Background Color" }
                 }
             },
             {
                 Language.SimplifiedChinese, new Dictionary<string, string>
                 {
+                    { "radar_base_settings", "基础设置" },
+                    { "radar_advanced_settings", "进阶设置" },
+                    { "radar_color_settings", "颜色设置" },
+                    { "radar_radar_settings", "雷达设置" },
+                    { "language", "语言" },
+                    { "language_info", "语言偏好, 如果没有对应的语言，将使用英语作为默认语言" },
                     { "radar_enable", "开启雷达" },
                     { "radar_enable_shortcut", "雷达开启热键" },
                     { "radar_pulse_enable", "开启雷达扫描动画" },
