@@ -5,72 +5,77 @@ using System.Linq;
 
 namespace Radar
 {
-    public enum Language
+    public abstract class Locales
     {
-        [Description("English")] English,
-        [Description("简体中文")] SimplifiedChinese
-    }
-
-    public abstract class LanguageList
-    {
-        private static readonly LanguageInfo English = new(Language.English, "en");
-
-        private static readonly LanguageInfo SimplifiedChinese = new(Language.SimplifiedChinese, "zh-CN");
-
-        private static readonly LanguageInfo[] Languages =
+        public enum Language
         {
-            English, SimplifiedChinese
-        };
+            [Description("English")] English,
+            [Description("简体中文")] SimplifiedChinese
+        }
 
-        public static readonly LanguageInfo Default = English;
+        public static Language Default = Language.English;
 
-        public class LanguageInfo
+        public abstract class LanguageList
         {
-            public string CultureName { get; }
+            private static readonly LanguageInfo English = new(Language.English, "en");
 
-            public Language Language { get; }
+            private static readonly LanguageInfo SimplifiedChinese = new(Language.SimplifiedChinese, "zh-CN");
 
-            internal LanguageInfo(Language language, string cultureName)
+            private static readonly LanguageInfo[] Languages =
             {
-                Language = language;
-                CultureName = cultureName;
+                English, SimplifiedChinese
+            };
+
+
+            public class LanguageInfo
+            {
+                public string CultureName { get; }
+
+                public Language Language { get; }
+
+                internal LanguageInfo(Language language, string cultureName)
+                {
+                    Language = language;
+                    CultureName = cultureName;
+                }
+            }
+
+            public static Language ByCultureName(string cultureName)
+            {
+                try
+                {
+                    return Languages.Single(language => string.Equals(language.CultureName, cultureName,
+                        StringComparison.CurrentCultureIgnoreCase)).Language;
+                }
+                catch (Exception)
+                {
+                    return Default;
+                }
             }
         }
 
-        public static Language ByCultureName(string cultureName)
-        {
-            try
-            {
-                return Languages.Single(language => string.Equals(language.CultureName, cultureName,
-                    StringComparison.CurrentCultureIgnoreCase)).Language;
-            }
-            catch (Exception)
-            {
-                return Default.Language;
-            }
-        }
-    }
 
-    internal abstract class Locales
-    {
         private static readonly Dictionary<Language, Dictionary<string, string>> Translations = new()
         {
             {
                 Language.English, new Dictionary<string, string>
                 {
-                    { "radar_base_settings", "Base Settings" },
-                    { "radar_advanced_settings", "Advanced Settings" },
-                    { "radar_color_settings", "Color Settings" },
-                    { "radar_radar_settings", "Radar Settings" },
+                    { "radar_base_settings", "1. Base Settings" },
+                    { "radar_advanced_settings", "2. Advanced Settings" },
+                    { "radar_radar_settings", "3. Radar Settings" },
+                    { "radar_color_settings", "4. Color Settings" },
                     { "language", "Language" },
-                    { "language_info", "Preferred language, if not available will tried English" },
+                    { "language_info", "Preferred language, if not available will tried English. \nNote that when changing to another language for the first time, the radar configuration for that language will be restored to its default values." },
                     { "radar_enable", "Radar Enabled" },
+                    { "make_radar_enable", "Make Radar Enabled" },
                     { "radar_enable_shortcut", "Short cut for enable/disable radar" },
                     { "radar_pulse_enable", "Radar Pulse Enabled" },
                     { "radar_pulse_enable_info", "Adds the radar scan effect." },
                     { "radar_corpse_enable", "Corpse Detection Enabled" },
+                    { "make_radar_corpse_enable", "Make Corpse Detection Enabled" },
                     { "radar_corpse_shortcut", "Short cut for enable/disable corpse dection" },
                     { "radar_loot_enable", "Loot Detection Enabled" },
+                    { "make_radar_loot_enable", "Make Loot Detection Enabled" },
                     { "radar_loot_shortcut", "Short cut for enable/disable loot dection" },
                     { "radar_hud_size", "HUD Size" },
                     { "radar_hud_size_info", "The size of the radar Hud." },
@@ -108,19 +113,22 @@ namespace Radar
             {
                 Language.SimplifiedChinese, new Dictionary<string, string>
                 {
-                    { "radar_base_settings", "基础设置" },
-                    { "radar_advanced_settings", "进阶设置" },
-                    { "radar_color_settings", "颜色设置" },
-                    { "radar_radar_settings", "雷达设置" },
+                    { "radar_base_settings", "1. 基础设置" },
+                    { "radar_advanced_settings", "2. 进阶设置" },
+                    { "radar_radar_settings", "3. 雷达设置" },
+                    { "radar_color_settings", "4. 颜色设置" },
                     { "language", "语言" },
-                    { "language_info", "语言偏好, 如果没有对应的语言，将使用英语作为默认语言" },
+                    { "language_info", "语言偏好, 如果没有对应的语言，将使用英语作为默认语言。\n注意，第一次更改到另一种语言，该语言的雷达配置将恢复默认值。" },
                     { "radar_enable", "开启雷达" },
+                    { "make_radar_enable", "是否开启雷达" },
                     { "radar_enable_shortcut", "雷达开启热键" },
                     { "radar_pulse_enable", "开启雷达扫描动画" },
                     { "radar_pulse_enable_info", "增加转圈扫描效果" },
                     { "radar_corpse_enable", "尸体位置显示" },
+                    { "make_radar_corpse_enable", "是否开启尸体位置显示" },
                     { "radar_corpse_shortcut", "尸体显示热键" },
                     { "radar_loot_enable", "高价值物品显示" },
+                    { "make_radar_loot_enable", "是否开启高价值物品显示" },
                     { "radar_loot_shortcut", "物品显示热键" },
                     { "radar_hud_size", "雷达界面大小" },
                     { "radar_hud_size_info", "雷达界面的大小" },
@@ -151,19 +159,28 @@ namespace Radar
             }
         };
 
-        public static string GetTranslatedString(string key)
+        public static string GetTranslatedString(string key, Language systemLanguage)
         {
             // Default to English if the selected language is not found
-            var language = Radar.radarLanguage.Value;
+            Language language;
+            try
+            {
+                language = Radar.radarLanguage.Value;
+            }
+            catch (Exception)
+            {
+                language = systemLanguage;
+            }
+
             if (!Translations.ContainsKey(language))
             {
-                language = LanguageList.Default.Language;
+                language = Default;
             }
 
             // Default to the original English text if the translation is not found
             return Translations[language].ContainsKey(key)
                 ? Translations[language][key]
-                : Translations[LanguageList.Default.Language][key];
+                : Translations[Language.English][key];
         }
     }
 }
