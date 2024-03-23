@@ -16,29 +16,6 @@ using System.Threading;
 
 namespace Radar
 {
-    internal sealed class ConfigurationManagerAttributes
-    {
-        public bool? ShowRangeAsPercent;
-        public System.Action<ConfigEntryBase> CustomDrawer;
-        public CustomHotkeyDrawerFunc CustomHotkeyDrawer;
-
-        public delegate void CustomHotkeyDrawerFunc(ConfigEntryBase setting,
-            ref bool isCurrentlyAcceptingInput);
-
-        public bool? Browsable;
-        public string Category;
-        public object DefaultValue;
-        public bool? HideDefaultButton;
-        public bool? HideSettingName;
-        public string Description;
-        public string DispName;
-        public int? Order;
-        public bool? ReadOnly;
-        public bool? IsAdvanced;
-        public System.Func<object, string> ObjToStr;
-        public System.Func<string, object> StrToObj;
-    }
-
     [BepInPlugin("Tyrian.Radar", "Radar", "1.1.1")]
     public class Radar : BaseUnityPlugin
     {
@@ -48,6 +25,7 @@ namespace Radar
         public static Radar instance;
         public static Dictionary<GameObject, HashSet<Material>> objectsMaterials = new();
 
+        const string langSettings = "radar_lang_settings";
         const string baseSettings = "radar_base_settings";
         const string advancedSettings = "radar_advanced_settings";
         const string radarSettings = "radar_radar_settings";
@@ -108,11 +86,13 @@ namespace Radar
 
             var systemLanguage = Locales.LanguageList.ByCultureName(currentCultureName);
 
-            radarLanguage = Config.Bind(Locales.GetTranslatedString(baseSettings, systemLanguage),
+            radarLanguage = Config.Bind(Locales.GetTranslatedString(langSettings, systemLanguage),
                 Locales.GetTranslatedString("language", systemLanguage),
                 Locales.LanguageList.ByCultureName(currentCultureName),
                 new ConfigDescription(Locales.GetTranslatedString("language_info", systemLanguage), null,
-                    new ConfigurationManagerAttributes { IsAdvanced = false, Order = 24 }));
+                    new ConfigurationManagerAttributes
+                        { IsAdvanced = true, Order = 24 }));
+
             radarEnableConfig = Config.Bind(Locales.GetTranslatedString(baseSettings, systemLanguage),
                 Locales.GetTranslatedString("radar_enable", systemLanguage), true,
                 new ConfigDescription(Locales.GetTranslatedString("make_radar_enable", systemLanguage), null,
