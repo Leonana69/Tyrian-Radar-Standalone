@@ -11,27 +11,27 @@ using UnityEngine;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
 using LootItem = EFT.Interactive.LootItem;
-using Debug = UnityEngine.Debug;
 using System.Linq;
-using static MineDirectional;
+using System.Threading;
 
 namespace Radar
 {
-    [BepInPlugin("Tyrian.Radar", "Radar", "1.1.0")]
+    [BepInPlugin("Tyrian.Radar", "Radar", "1.1.1")]
     public class Radar : BaseUnityPlugin
     {
         private static GameWorld gameWorld;
         public static bool MapLoaded() => Singleton<GameWorld>.Instantiated;
         public static Player player;
         public static Radar instance;
-        public static Dictionary<GameObject, HashSet<Material>> objectsMaterials = new Dictionary<GameObject, HashSet<Material>>();
+        public static Dictionary<GameObject, HashSet<Material>> objectsMaterials = new();
 
-        const string baseSettings = "Base Settings";
-        const string advancedSettings = "Advanced Settings";
-        const string colorSettings = "Color Settings";
-        const string radarSettings = "Radar Settings";
+        const string langSettings = "radar_lang_settings";
+        const string baseSettings = "radar_base_settings";
+        const string advancedSettings = "radar_advanced_settings";
+        const string radarSettings = "radar_radar_settings";
+        const string colorSettings = "radar_color_settings";
 
-        public static ConfigEntry<string> radarLanguage;
+        public static ConfigEntry<Locales.Language> radarLanguage;
         public static ConfigEntry<bool> radarEnableConfig;
         public static ConfigEntry<bool> radarEnablePulseConfig;
         public static ConfigEntry<bool> radarEnableCorpseConfig;
@@ -39,9 +39,9 @@ namespace Radar
         public static ConfigEntry<KeyboardShortcut> radarEnableShortCutConfig;
         public static ConfigEntry<KeyboardShortcut> radarEnableCorpseShortCutConfig;
         public static ConfigEntry<KeyboardShortcut> radarEnableLootShortCutConfig;
-        public static bool enableSCDown = false;
-        public static bool corpseSCDown = false;
-        public static bool lootSCDown = false;
+        public static bool enableSCDown;
+        public static bool corpseSCDown;
+        public static bool lootSCDown;
 
         public static ConfigEntry<float> radarSizeConfig;
         public static ConfigEntry<float> radarBlipSizeConfig;
@@ -71,6 +71,8 @@ namespace Radar
 
         private void Awake()
         {
+            var currentCultureName = Thread.CurrentThread.CurrentCulture.Name;
+            Logger.LogDebug($"Current Culture: {currentCultureName}");
             logger = Logger;
             logger.LogInfo("Radar Plugin Enabled.");
             if (instance != null && instance != this)
@@ -82,46 +84,131 @@ namespace Radar
             instance = this;
             DontDestroyOnLoad(gameObject);
 
-            // Add a custom configuration option for the Apply button
-            radarLanguage = Config.Bind<string>(baseSettings, "Language", "EN",
-                new ConfigDescription("Preferred language, if not available will tried English",
-                new AcceptableValueList<string>("EN", "ZH")));
+            var systemLanguage = Locales.LanguageList.ByCultureName(currentCultureName);
 
-            radarEnableConfig = Config.Bind(baseSettings, Locales.GetTranslatedString("radar_enable"), true);
-            radarEnableShortCutConfig = Config.Bind(baseSettings, Locales.GetTranslatedString("radar_enable_shortcut"), new KeyboardShortcut(KeyCode.F10));
-            radarEnablePulseConfig = Config.Bind(baseSettings, Locales.GetTranslatedString("radar_pulse_enable"), true, Locales.GetTranslatedString("radar_pulse_enable_info"));
+            radarLanguage = Config.Bind(Locales.GetTranslatedString(langSettings, systemLanguage),
+                Locales.GetTranslatedString("language", systemLanguage),
+                Locales.LanguageList.ByCultureName(currentCultureName),
+                new ConfigDescription(Locales.GetTranslatedString("language_info", systemLanguage), null,
+                    new ConfigurationManagerAttributes
+                        { IsAdvanced = true, Order = 24 }));
 
-            radarEnableCorpseConfig = Config.Bind(advancedSettings, Locales.GetTranslatedString("radar_corpse_enable"), true);
-            radarEnableCorpseShortCutConfig = Config.Bind(advancedSettings, Locales.GetTranslatedString("radar_corpse_shortcut"), new KeyboardShortcut(KeyCode.F11));
-            radarEnableLootConfig = Config.Bind(advancedSettings, Locales.GetTranslatedString("radar_loot_enable"), true);
-            radarEnableLootShortCutConfig = Config.Bind(advancedSettings, Locales.GetTranslatedString("radar_loot_shortcut"), new KeyboardShortcut(KeyCode.F9));
+            radarEnableConfig = Config.Bind(Locales.GetTranslatedString(baseSettings, systemLanguage),
+                Locales.GetTranslatedString("radar_enable", systemLanguage), true,
+                new ConfigDescription(Locales.GetTranslatedString("make_radar_enable", systemLanguage), null,
+                    new ConfigurationManagerAttributes { IsAdvanced = false, Order = 23 }));
+            radarEnablePulseConfig = Config.Bind(Locales.GetTranslatedString(baseSettings, systemLanguage),
+                Locales.GetTranslatedString("radar_pulse_enable", systemLanguage), true,
+                new ConfigDescription(Locales.GetTranslatedString("radar_pulse_enable_info", systemLanguage), null,
+                    new ConfigurationManagerAttributes { IsAdvanced = false, Order = 22 }));
+            radarEnableCorpseConfig = Config.Bind(Locales.GetTranslatedString(baseSettings, systemLanguage),
+                Locales.GetTranslatedString("radar_corpse_enable", systemLanguage),
+                true,
+                new ConfigDescription(Locales.GetTranslatedString("make_radar_corpse_enable", systemLanguage),
+                    null,
+                    new ConfigurationManagerAttributes { IsAdvanced = false, Order = 21 }));
+            radarEnableLootConfig = Config.Bind(Locales.GetTranslatedString(baseSettings, systemLanguage),
+                Locales.GetTranslatedString("radar_loot_enable", systemLanguage),
+                true,
+                new ConfigDescription(Locales.GetTranslatedString("make_radar_loot_enable", systemLanguage), null,
+                    new ConfigurationManagerAttributes { IsAdvanced = false, Order = 20 }));
 
-            radarSizeConfig = Config.Bind<float>(radarSettings, Locales.GetTranslatedString("radar_hud_size"), 0.8f,
-                new ConfigDescription(Locales.GetTranslatedString("radar_hud_size_info"), new AcceptableValueRange<float>(0.0f, 1f)));
-            radarBlipSizeConfig = Config.Bind<float>(radarSettings, Locales.GetTranslatedString("radar_blip_size"), 0.7f,
-                new ConfigDescription(Locales.GetTranslatedString("radar_blip_size_info"), new AcceptableValueRange<float>(0.0f, 1f)));
-            radarDistanceScaleConfig = Config.Bind<float>(radarSettings, Locales.GetTranslatedString("radar_distance_scale"), 0.7f,
-                new ConfigDescription(Locales.GetTranslatedString("radar_distance_scale_info"), new AcceptableValueRange<float>(0.1f, 2f)));
-            radarYHeightThreshold = Config.Bind<float>(radarSettings, Locales.GetTranslatedString("radar_y_height_threshold"), 1f,
-                new ConfigDescription(Locales.GetTranslatedString("radar_y_height_threshold_info"), new AcceptableValueRange<float>(1f, 4f)));
-            radarOffsetXConfig = Config.Bind<float>(radarSettings, Locales.GetTranslatedString("radar_x_position"), 0f,
-                new ConfigDescription(Locales.GetTranslatedString("radar_x_position_info"), new AcceptableValueRange<float>(-4000f, 4000f)));
-            radarOffsetYConfig = Config.Bind<float>(radarSettings, Locales.GetTranslatedString("radar_y_position"), 0f,
-                new ConfigDescription(Locales.GetTranslatedString("radar_y_position_info"), new AcceptableValueRange<float>(-4000f, 4000f)));
-            radarRangeConfig = Config.Bind<float>(radarSettings, Locales.GetTranslatedString("radar_range"), 128f,
-                new ConfigDescription(Locales.GetTranslatedString("radar_range_info"), new AcceptableValueRange<float>(32f, 512f)));
-            radarScanInterval = Config.Bind<float>(radarSettings, Locales.GetTranslatedString("radar_scan_interval"), 1f,
-                new ConfigDescription(Locales.GetTranslatedString("radar_scan_interval_info"), new AcceptableValueRange<float>(0.1f, 30f)));
-            radarLootThreshold = Config.Bind<float>(radarSettings, Locales.GetTranslatedString("radar_loot_threshold"), 30000f,
-                new ConfigDescription(Locales.GetTranslatedString("radar_loot_threshold_info"), new AcceptableValueRange<float>(1000f, 100000f)));
-            
-            bossBlipColor = Config.Bind<Color>(colorSettings, Locales.GetTranslatedString("radar_boss_blip_color"), new Color(1f, 0f, 0f));
-            scavBlipColor = Config.Bind<Color>(colorSettings, Locales.GetTranslatedString("radar_scav_blip_color"), new Color(0f, 1f, 0f));
-            usecBlipColor = Config.Bind<Color>(colorSettings, Locales.GetTranslatedString("radar_usec_blip_color"), new Color(1f, 1f, 0f));
-            bearBlipColor = Config.Bind<Color>(colorSettings, Locales.GetTranslatedString("radar_bear_blip_color"), new Color(1f, 0.5f, 0f));
-            corpseBlipColor = Config.Bind<Color>(colorSettings, Locales.GetTranslatedString("radar_corpse_blip_color"), new Color(0.5f, 0.5f, 0.5f));
-            lootBlipColor = Config.Bind<Color>(colorSettings, Locales.GetTranslatedString("radar_loot_blip_color"), new Color(0.9f, 0.5f, 0.5f));
-            backgroundColor = Config.Bind<Color>(colorSettings, Locales.GetTranslatedString("radar_background_blip_color"), new Color(0f, 0.7f, 0.85f));
+            radarEnableShortCutConfig = Config.Bind(Locales.GetTranslatedString(advancedSettings, systemLanguage),
+                Locales.GetTranslatedString("radar_enable_shortcut", systemLanguage),
+                new KeyboardShortcut(KeyCode.F10), new ConfigDescription("", null,
+                    new ConfigurationManagerAttributes { IsAdvanced = false, Order = 19 }));
+            radarEnableCorpseShortCutConfig = Config.Bind(Locales.GetTranslatedString(advancedSettings, systemLanguage),
+                Locales.GetTranslatedString("radar_corpse_shortcut", systemLanguage),
+                new KeyboardShortcut(KeyCode.F11), new ConfigDescription("", null,
+                    new ConfigurationManagerAttributes { IsAdvanced = false, Order = 18 }));
+            radarEnableLootShortCutConfig = Config.Bind(Locales.GetTranslatedString(advancedSettings, systemLanguage),
+                Locales.GetTranslatedString("radar_loot_shortcut", systemLanguage),
+                new KeyboardShortcut(KeyCode.F9), new ConfigDescription("", null,
+                    new ConfigurationManagerAttributes { IsAdvanced = false, Order = 17 }));
+
+            radarSizeConfig = Config.Bind(Locales.GetTranslatedString(radarSettings, systemLanguage),
+                Locales.GetTranslatedString("radar_hud_size", systemLanguage), 0.8f,
+                new ConfigDescription(Locales.GetTranslatedString("radar_hud_size_info", systemLanguage),
+                    new AcceptableValueRange<float>(0.0f, 1f),
+                    new ConfigurationManagerAttributes { IsAdvanced = false, Order = 16 }));
+            radarBlipSizeConfig = Config.Bind(Locales.GetTranslatedString(radarSettings, systemLanguage),
+                Locales.GetTranslatedString("radar_blip_size", systemLanguage), 0.7f,
+                new ConfigDescription(Locales.GetTranslatedString("radar_blip_size_info", systemLanguage),
+                    new AcceptableValueRange<float>(0.0f, 1f),
+                    new ConfigurationManagerAttributes { IsAdvanced = false, Order = 15 }));
+            radarDistanceScaleConfig = Config.Bind(Locales.GetTranslatedString(radarSettings, systemLanguage),
+                Locales.GetTranslatedString("radar_distance_scale", systemLanguage),
+                0.7f,
+                new ConfigDescription(Locales.GetTranslatedString("radar_distance_scale_info", systemLanguage),
+                    new AcceptableValueRange<float>(0.1f, 2f),
+                    new ConfigurationManagerAttributes { IsAdvanced = false, Order = 14 }));
+            radarYHeightThreshold = Config.Bind(Locales.GetTranslatedString(radarSettings, systemLanguage),
+                Locales.GetTranslatedString("radar_y_height_threshold", systemLanguage),
+                1f,
+                new ConfigDescription(Locales.GetTranslatedString("radar_y_height_threshold_info", systemLanguage),
+                    new AcceptableValueRange<float>(1f, 4f),
+                    new ConfigurationManagerAttributes { IsAdvanced = false, Order = 13 }));
+            radarOffsetXConfig = Config.Bind(Locales.GetTranslatedString(radarSettings, systemLanguage),
+                Locales.GetTranslatedString("radar_x_position", systemLanguage), 0f,
+                new ConfigDescription(Locales.GetTranslatedString("radar_x_position_info", systemLanguage),
+                    new AcceptableValueRange<float>(-4000f, 4000f),
+                    new ConfigurationManagerAttributes { IsAdvanced = false, Order = 12 }));
+            radarOffsetYConfig = Config.Bind(Locales.GetTranslatedString(radarSettings, systemLanguage),
+                Locales.GetTranslatedString("radar_y_position", systemLanguage), 0f,
+                new ConfigDescription(Locales.GetTranslatedString("radar_y_position_info", systemLanguage),
+                    new AcceptableValueRange<float>(-4000f, 4000f),
+                    new ConfigurationManagerAttributes { IsAdvanced = false, Order = 11 }));
+            radarRangeConfig = Config.Bind(Locales.GetTranslatedString(radarSettings, systemLanguage),
+                Locales.GetTranslatedString("radar_range", systemLanguage), 128f,
+                new ConfigDescription(Locales.GetTranslatedString("radar_range_info", systemLanguage),
+                    new AcceptableValueRange<float>(32f, 512f),
+                    new ConfigurationManagerAttributes { IsAdvanced = false, Order = 10 }));
+            radarScanInterval = Config.Bind(Locales.GetTranslatedString(radarSettings, systemLanguage),
+                Locales.GetTranslatedString("radar_scan_interval", systemLanguage), 1f,
+                new ConfigDescription(Locales.GetTranslatedString("radar_scan_interval_info", systemLanguage),
+                    new AcceptableValueRange<float>(0.1f, 30f),
+                    new ConfigurationManagerAttributes { IsAdvanced = false, Order = 9 }));
+            radarLootThreshold = Config.Bind(Locales.GetTranslatedString(radarSettings, systemLanguage),
+                Locales.GetTranslatedString("radar_loot_threshold", systemLanguage), 30000f,
+                new ConfigDescription(Locales.GetTranslatedString("radar_loot_threshold_info", systemLanguage),
+                    new AcceptableValueRange<float>(1000f, 100000f),
+                    new ConfigurationManagerAttributes { IsAdvanced = false, Order = 8 }));
+
+            bossBlipColor = Config.Bind(Locales.GetTranslatedString(colorSettings, systemLanguage),
+                Locales.GetTranslatedString("radar_boss_blip_color", systemLanguage),
+                new Color(1f, 0f, 0f),
+                new ConfigDescription("", null,
+                    new ConfigurationManagerAttributes { IsAdvanced = false, Order = 7 }));
+            scavBlipColor = Config.Bind(Locales.GetTranslatedString(colorSettings, systemLanguage),
+                Locales.GetTranslatedString("radar_scav_blip_color", systemLanguage),
+                new Color(0f, 1f, 0f),
+                new ConfigDescription("", null,
+                    new ConfigurationManagerAttributes { IsAdvanced = false, Order = 6 }));
+            usecBlipColor = Config.Bind(Locales.GetTranslatedString(colorSettings, systemLanguage),
+                Locales.GetTranslatedString("radar_usec_blip_color", systemLanguage),
+                new Color(1f, 1f, 0f),
+                new ConfigDescription("", null,
+                    new ConfigurationManagerAttributes { IsAdvanced = false, Order = 5 }));
+            bearBlipColor = Config.Bind(Locales.GetTranslatedString(colorSettings, systemLanguage),
+                Locales.GetTranslatedString("radar_bear_blip_color", systemLanguage),
+                new Color(1f, 0.5f, 0f),
+                new ConfigDescription("", null,
+                    new ConfigurationManagerAttributes { IsAdvanced = false, Order = 4 }));
+            corpseBlipColor = Config.Bind(Locales.GetTranslatedString(colorSettings, systemLanguage),
+                Locales.GetTranslatedString("radar_corpse_blip_color", systemLanguage),
+                new Color(0.5f, 0.5f, 0.5f),
+                new ConfigDescription("", null,
+                    new ConfigurationManagerAttributes { IsAdvanced = false, Order = 3 }));
+            lootBlipColor = Config.Bind(Locales.GetTranslatedString(colorSettings, systemLanguage),
+                Locales.GetTranslatedString("radar_loot_blip_color", systemLanguage),
+                new Color(0.9f, 0.5f, 0.5f),
+                new ConfigDescription("", null,
+                    new ConfigurationManagerAttributes { IsAdvanced = false, Order = 2 }));
+            backgroundColor = Config.Bind(Locales.GetTranslatedString(colorSettings, systemLanguage),
+                Locales.GetTranslatedString("radar_background_blip_color", systemLanguage),
+                new Color(0f, 0.7f, 0.85f),
+                new ConfigDescription("", null,
+                    new ConfigurationManagerAttributes { IsAdvanced = false, Order = 1 }));
         }
 
         private void Update()
@@ -143,6 +230,7 @@ namespace Radar
                 radarEnableConfig.Value = !radarEnableConfig.Value;
                 enableSCDown = true;
             }
+
             if (!radarEnableShortCutConfig.Value.IsDown())
             {
                 enableSCDown = false;
@@ -154,6 +242,7 @@ namespace Radar
                 radarEnableCorpseConfig.Value = !radarEnableCorpseConfig.Value;
                 corpseSCDown = true;
             }
+
             if (!radarEnableCorpseShortCutConfig.Value.IsDown())
             {
                 corpseSCDown = false;
@@ -165,6 +254,7 @@ namespace Radar
                 radarEnableLootConfig.Value = !radarEnableLootConfig.Value;
                 lootSCDown = true;
             }
+
             if (!radarEnableLootShortCutConfig.Value.IsDown())
             {
                 lootSCDown = false;
@@ -184,13 +274,12 @@ namespace Radar
         }
     }
 
-    
 
     public class HaloRadar : MonoBehaviour
     {
         public static GameWorld gameWorld;
         public static Player player;
-        public static Object RadarhudPrefab { get; private set; } 
+        public static Object RadarhudPrefab { get; private set; }
         public static Object RadarBliphudPrefab { get; private set; }
         public static AssetBundle radarBundle;
         public static GameObject radarHud;
@@ -217,18 +306,19 @@ namespace Radar
         public static float radarLastUpdateTime = 0;
         public float radarInterval = -1;
 
-        public HashSet<int> enemyList = new HashSet<int>();
-        public List<BlipPlayer> enemyCustomObject = new List<BlipPlayer>();
+        public HashSet<int> enemyList = new();
+        public List<BlipPlayer> enemyCustomObject = new();
 
-        public HashSet<string> lootList = new HashSet<string>();
-        public List<BlipLoot> lootCustomObject = new List<BlipLoot>();
+        public HashSet<string> lootList = new();
+        public List<BlipLoot> lootCustomObject = new();
 
         private void Start()
         {
             // Create our prefabs from our bundles.
             if (RadarhudPrefab == null)
             {
-                String haloRadarHUD = Path.Combine(Environment.CurrentDirectory, "BepInEx/plugins/radar/radarhud.bundle");
+                String haloRadarHUD =
+                    Path.Combine(Environment.CurrentDirectory, "BepInEx/plugins/radar/radarhud.bundle");
                 if (!File.Exists(haloRadarHUD))
                     return;
                 radarBundle = AssetBundle.LoadFromFile(haloRadarHUD);
@@ -243,6 +333,7 @@ namespace Radar
                 EnemyBlipDead = radarBundle.LoadAsset<Sprite>("EnemyBlipDead");
             }
         }
+
         private void Update()
         {
             if (MapLoaded())
@@ -269,7 +360,8 @@ namespace Radar
 
                 if (radarHud == null)
                 {
-                    var radarHudBase = Instantiate(RadarhudPrefab, playerCamera.transform.position, playerCamera.transform.rotation);
+                    var radarHudBase = Instantiate(RadarhudPrefab, playerCamera.transform.position,
+                        playerCamera.transform.rotation);
                     radarHud = radarHudBase as GameObject;
                     radarHud.transform.parent = playerCamera.transform;
                     radarHudBasePosition = radarHud.transform.Find("Radar") as RectTransform;
@@ -279,20 +371,26 @@ namespace Radar
                     radarScaleStart = radarHudBasePosition.localScale;
                     radarPositionYStart = radarHudBasePosition.position.y;
                     radarPositionXStart = radarHudBasePosition.position.x;
-                    radarHudBasePosition.position = new Vector2(radarPositionXStart + Radar.radarOffsetXConfig.Value, radarPositionYStart + Radar.radarOffsetYConfig.Value);
-                    radarHudBasePosition.localScale = new Vector2(radarScaleStart.x * Radar.radarSizeConfig.Value, radarScaleStart.y * Radar.radarSizeConfig.Value);
+                    radarHudBasePosition.position = new Vector2(radarPositionXStart + Radar.radarOffsetXConfig.Value,
+                        radarPositionYStart + Radar.radarOffsetYConfig.Value);
+                    radarHudBasePosition.localScale = new Vector2(radarScaleStart.x * Radar.radarSizeConfig.Value,
+                        radarScaleStart.y * Radar.radarSizeConfig.Value);
 
                     radarHudBlipBasePosition.GetComponent<Image>().color = Radar.backgroundColor.Value;
                     radarHudPulse.GetComponent<Image>().color = Radar.backgroundColor.Value;
-                    radarHud.transform.Find("Radar/RadarBackground").GetComponent<Image>().color = Radar.backgroundColor.Value;
+                    radarHud.transform.Find("Radar/RadarBackground").GetComponent<Image>().color =
+                        Radar.backgroundColor.Value;
 
                     radarHud.SetActive(true);
                 }
 
-                radarHudBasePosition.position = new Vector2(radarPositionXStart + Radar.radarOffsetXConfig.Value, radarPositionYStart + Radar.radarOffsetYConfig.Value);
-                radarHudBasePosition.localScale = new Vector2(radarScaleStart.x * Radar.radarSizeConfig.Value, radarScaleStart.y * Radar.radarSizeConfig.Value);
-                radarHudBlipBasePosition.GetComponent<RectTransform>().eulerAngles = new Vector3(0, 0, playerCamera.transform.eulerAngles.y);
-                
+                radarHudBasePosition.position = new Vector2(radarPositionXStart + Radar.radarOffsetXConfig.Value,
+                    radarPositionYStart + Radar.radarOffsetYConfig.Value);
+                radarHudBasePosition.localScale = new Vector2(radarScaleStart.x * Radar.radarSizeConfig.Value,
+                    radarScaleStart.y * Radar.radarSizeConfig.Value);
+                radarHudBlipBasePosition.GetComponent<RectTransform>().eulerAngles =
+                    new Vector3(0, 0, playerCamera.transform.eulerAngles.y);
+
                 UpdateLoot();
                 long rslt = UpdateActivePlayer();
                 UpdateRadar(rslt != -1);
@@ -323,6 +421,7 @@ namespace Radar
             {
                 StopCoroutine(pulseCoroutine);
             }
+
             // Start the pulse coroutine
             pulseCoroutine = StartCoroutine(PulseCoroutine());
         }
@@ -334,6 +433,7 @@ namespace Radar
             {
                 interval = 1;
             }
+
             while (true)
             {
                 // Rotate from 360 to 0 over the animation duration
@@ -362,6 +462,7 @@ namespace Radar
             {
                 radarLastUpdateTime = Time.time;
             }
+
             IEnumerable<Player> allPlayers = gameWorld.AllPlayersEverExisted;
 
             if (allPlayers.Count() == enemyList.Count + 1)
@@ -375,12 +476,14 @@ namespace Radar
                 {
                     continue;
                 }
+
                 if (!enemyList.Contains(enemyPlayer.Id))
                 {
                     enemyList.Add(enemyPlayer.Id);
                     enemyCustomObject.Add(new BlipPlayer(enemyPlayer));
                 }
             }
+
             return 0;
         }
 
@@ -400,8 +503,10 @@ namespace Radar
                     {
                         loot.DestoryLoot();
                     }
+
                     lootCustomObject.Clear();
                 }
+
                 return;
             }
 
@@ -417,7 +522,9 @@ namespace Radar
                 }
             }
 
-            foreach (var item in lootCustomObject.Where(item => !checkedLoot.Contains(item.itemId)).ToList()) // ToList creates a copy to avoid modification during enumeration
+            foreach (var item in
+                     lootCustomObject.Where(item => !checkedLoot.Contains(item.itemId))
+                         .ToList()) // ToList creates a copy to avoid modification during enumeration
             {
                 item.DestoryLoot();
                 lootList.Remove(item.itemId);
@@ -434,6 +541,7 @@ namespace Radar
             {
                 obj.Update(positionUpdate);
             }
+
             foreach (var obj in lootCustomObject)
             {
                 obj.Update(positionUpdate);
