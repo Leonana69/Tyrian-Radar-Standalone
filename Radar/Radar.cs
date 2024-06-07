@@ -13,8 +13,8 @@ namespace Radar
     [BepInPlugin("Tyrian.Radar", "Radar", "1.1.5")]
     public class Radar : BaseUnityPlugin
     {
-        internal static Radar Instance {get; private set;}
-        
+        internal static Radar Instance { get; private set; }
+
         public static Dictionary<GameObject, HashSet<Material>> objectsMaterials = new Dictionary<GameObject, HashSet<Material>>();
 
         const string baseSettings = "Base Settings";
@@ -26,6 +26,7 @@ namespace Radar
         public static ConfigEntry<bool> radarEnableConfig;
         public static ConfigEntry<bool> radarEnablePulseConfig;
         public static ConfigEntry<bool> radarEnableCorpseConfig;
+        public static ConfigEntry<bool> radarEnableScavCorpseConfig;
         public static ConfigEntry<bool> radarEnableLootConfig;
         public static ConfigEntry<bool> radarEnableFireModeConfig;
         public static ConfigEntry<bool> radarEnableCompassConfig;
@@ -80,6 +81,7 @@ namespace Radar
             radarEnableCompassConfig = Config.Bind(baseSettings, Locales.GetTranslatedString("radar_compass_enable"), false, Locales.GetTranslatedString("radar_compass_enable_info"));
 
             radarEnableCorpseConfig = Config.Bind(advancedSettings, Locales.GetTranslatedString("radar_corpse_enable"), false);
+            radarEnableScavCorpseConfig = Config.Bind(advancedSettings, Locales.GetTranslatedString("radar_scav_corpse_enable"), false);
             radarEnableCorpseShortCutConfig = Config.Bind(advancedSettings, Locales.GetTranslatedString("radar_corpse_shortcut"), new KeyboardShortcut(KeyCode.F11));
             radarEnableLootConfig = Config.Bind(advancedSettings, Locales.GetTranslatedString("radar_loot_enable"), false);
             radarEnableLootShortCutConfig = Config.Bind(advancedSettings, Locales.GetTranslatedString("radar_loot_shortcut"), new KeyboardShortcut(KeyCode.F9));
@@ -112,9 +114,9 @@ namespace Radar
             corpseBlipColor = Config.Bind<Color>(colorSettings, Locales.GetTranslatedString("radar_corpse_blip_color"), new Color(0.5f, 0.5f, 0.5f));
             lootBlipColor = Config.Bind<Color>(colorSettings, Locales.GetTranslatedString("radar_loot_blip_color"), new Color(0.9f, 0.5f, 0.5f));
             backgroundColor = Config.Bind<Color>(colorSettings, Locales.GetTranslatedString("radar_background_blip_color"), new Color(0f, 0.7f, 0.85f));
-            
+
             AssetBundleManager.LoadAssetBundle();
-            
+
             new GameStartPatch().Enable();
         }
     }

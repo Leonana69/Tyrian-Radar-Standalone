@@ -91,7 +91,7 @@ namespace Radar
 
                 var distance = blipPosition.x * blipPosition.x + blipPosition.z * blipPosition.z;
                 _show = (distance > radarOuterRange * radarOuterRange || distance < radarInnerRange * radarInnerRange) ? false : true;
-                
+
                 if (!_isDead && _enemyPlayer.HealthController.IsAlive == _isDead)
                 {
                     _isDead = true;
@@ -100,6 +100,19 @@ namespace Radar
                 if (_isDead)
                 {
                     _show = Radar.radarEnableCorpseConfig.Value && _show;
+                }
+
+                // don't show scav corpses
+                if (Radar.radarEnableScavCorpseConfig.Value && _isDead && _enemyPlayer.Profile.Info.Side == EPlayerSide.Savage)
+                {
+                    if (
+                        _enemyPlayer.Profile.Info.Settings.Role == WildSpawnType.assault
+                        || _enemyPlayer.Profile.Info.Settings.Role == WildSpawnType.marksman
+                        || _enemyPlayer.Profile.Info.Settings.Role == WildSpawnType.assaultGroup
+                    )
+                    {
+                        _show = false;
+                    }
                 }
             }
 
@@ -148,7 +161,8 @@ namespace Radar
             else if (blipPosition.y < -totalThreshold)
             {
                 blipImage.sprite = AssetBundleManager.EnemyBlipDown;
-            } else
+            }
+            else
             {
                 blipImage.sprite = AssetBundleManager.EnemyBlipDead;
             }
