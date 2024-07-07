@@ -1,7 +1,7 @@
 ﻿using System.Reflection;
-using Aki.Reflection.Patching;
 using EFT;
 using JetBrains.Annotations;
+using SPT.Reflection.Patching;
 using UnityEngine;
 
 namespace Radar.Patches

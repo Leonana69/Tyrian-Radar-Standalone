@@ -3,8 +3,8 @@ using System.Reflection;
 using Comfort.Common;
 using EFT;
 using EFT.Interactive;
+using SPT.Reflection.Patching;
 using UnityEngine;
-using Aki.Reflection.Patching;
 
 namespace Radar.Patches
 {

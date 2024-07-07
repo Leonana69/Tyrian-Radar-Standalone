@@ -14,51 +14,59 @@
 		<Optimize>False</Optimize>
 	</PropertyGroup>
 
+	<PropertyGroup>
+		<TarkovDir Condition=" '$(TarkovDir)' == '' ">C:\Games\spt_3.9\</TarkovDir>
+		<TarkovPluginsSPTDir>$(TarkovDir)BepInEx\plugins\spt\</TarkovPluginsSPTDir>
+		<TarkovManagedDir>$(TarkovDir)EscapeFromTarkov_Data\Managed\</TarkovManagedDir>
+		<TarkovBepInExCoreDir>$(TarkovDir)BepInEx\core\</TarkovBepInExCoreDir>
+	</PropertyGroup>
+
 	<ItemGroup>
-		<Reference Include="..\dependencies\$(DependencyVersion)\Assembly-CSharp.dll">
+		<Reference Include="Assembly-CSharp">
+			<HintPath>$(TarkovManagedDir)Assembly-CSharp.dll</HintPath>
 			<Private>False</Private>
 		</Reference>
-		<Reference Include="..\dependencies\$(DependencyVersion)\BepInEx.dll">
+		<Reference Include="BepInEx">
+			<HintPath>$(TarkovBepInExCoreDir)BepInEx.dll</HintPath>
 			<Private>False</Private>
 		</Reference>
 		<Reference Include="Comfort">
-			<HintPath>..\dependencies\Comfort.dll</HintPath>
+			<HintPath>$(TarkovManagedDir)Comfort.dll</HintPath>
 			<Private>False</Private>
 		</Reference>
 		<Reference Include="UnityEngine">
-			<HintPath>..\dependencies\UnityEngine.dll</HintPath>
+			<HintPath>$(TarkovManagedDir)UnityEngine.dll</HintPath>
 			<Private>False</Private>
 		</Reference>
 		<Reference Include="UnityEngine.AssetBundleModule">
-			<HintPath>..\dependencies\UnityEngine.AssetBundleModule.dll</HintPath>
+			<HintPath>$(TarkovManagedDir)UnityEngine.AssetBundleModule.dll</HintPath>
 			<Private>False</Private>
 		</Reference>
 		<Reference Include="UnityEngine.CoreModule">
-			<HintPath>..\dependencies\UnityEngine.CoreModule.dll</HintPath>
+			<HintPath>$(TarkovManagedDir)UnityEngine.CoreModule.dll</HintPath>
 			<Private>False</Private>
 		</Reference>
 		<Reference Include="UnityEngine.UI">
-			<HintPath>..\dependencies\UnityEngine.UI.dll</HintPath>
+			<HintPath>$(TarkovManagedDir)UnityEngine.UI.dll</HintPath>
 			<Private>False</Private>
 		</Reference>
 		<Reference Include="UnityEngine.UIModule">
-			<HintPath>..\dependencies\UnityEngine.UIModule.dll</HintPath>
+			<HintPath>$(TarkovManagedDir)UnityEngine.UIModule.dll</HintPath>
 			<Private>False</Private>
 		</Reference>
 		<Reference Include="UnityEngine.PhysicsModule">
-			<HintPath>..\dependencies\UnityEngine.PhysicsModule.dll</HintPath>
-			<Private>False</Private>
+			<HintPath>$(TarkovManagedDir)UnityEngine.PhysicsModule.dll</HintPath>
 		</Reference>
-		<Reference Include="Aki.Reflection">
-			<HintPath>..\dependencies\Aki.Reflection.dll</HintPath>
-          <Private>False</Private>
+		<Reference Include="spt-reflection">
+			<HintPath>$(TarkovPluginsSPTDir)spt-reflection.dll</HintPath>
+			<Private>False</Private>
         </Reference>
-		<Reference Include="Aki.Common">
-			<HintPath>..\dependencies\Aki.Common.dll</HintPath>
+		<Reference Include="spt-common">
+			<HintPath>$(TarkovPluginsSPTDir)spt-common.dll</HintPath>
 			<Private>False</Private>
 		</Reference>
 		<Reference Include="Newtonsoft.Json">
-			<HintPath>..\dependencies\Newtonsoft.Json.dll</HintPath>
+			<HintPath>$(TarkovManagedDir)Newtonsoft.Json.dll</HintPath>
 			<Private>False</Private>
 		</Reference>
 	</ItemGroup>
