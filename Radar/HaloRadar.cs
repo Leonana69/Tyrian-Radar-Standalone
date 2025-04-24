@@ -142,6 +142,8 @@ namespace Radar
             {
                 Debug.LogError("Custom loot file not found.");
             }
+            if (debugInfo)
+                Debug.LogError("# Loaded list");
         }
 
         private void InitRadar()
@@ -341,12 +343,40 @@ namespace Radar
             // New item has high price && has not been added
             if (CheckPrice(args.Item) && !_lootInList.Contains(itemOwner.ID))
                 AddLoot(itemOwner.ID, itemOwner.Items.First(), _containerTransforms[itemOwner.ID]);
+            // New item is wanted && has not been added
+            if (CheckCustom(args.Item) && !_lootInList.Contains(itemOwner.ID))
+                AddLoot(itemOwner.ID, itemOwner.Items.First(), _containerTransforms[itemOwner.ID]);
         }
 
         private void OnContainerRemoveItemEvent(IItemOwner itemOwner, GEventArgs3 args)
         {
             if (CheckPrice(args.Item) && !CheckPrice(itemOwner.Items.First()))
                 RemoveLoot(itemOwner.ID);
+            if (CheckCustom(args.Item) && !CheckCustom(itemOwner.Items.First()))
+                RemoveLoot(itemOwner.ID);
+        }
+
+        private bool CheckCustom(Item item)
+        {
+            // Is the item itself wanted, container or not?
+            if (_customLoots?.items.Contains(item.TemplateId) ?? false)
+                return true;
+
+            if (item.IsContainer)
+            {
+                var allItems = item.GetAllItems();
+
+                foreach (var subItem in allItems)
+                {
+                    if (_customLoots?.items.Contains(subItem.TemplateId) ?? false)
+                        return true;
+                }
+                return false;
+            }
+            else
+            {
+                return _customLoots?.items.Contains(item.TemplateId) ?? false;
+            }
         }
 
         private bool CheckPrice(Item item)
@@ -391,8 +421,14 @@ namespace Radar
         public void AddLoot(string id, Item item, Transform transform, bool lazyUpdate = false)
         {
             //Debug.LogError($"AddLoot {item.IsContainer} {item.Name} {item.LocalizedName()} {transform.position}");
-            bool isCustomItem = _customLoots?.items.Contains(item.TemplateId) ?? false;
+            bool isCustomItem = CheckCustom(item);
             bool isValuableItem = !item.Name.StartsWith(PLAYER_INVENTORY_PREFIX) && CheckPrice(item);
+
+            if (debugInfo && isValuableItem)
+            {
+                Debug.LogError(item);
+                Debug.LogError(item.TemplateId);
+            }
 
             if (isCustomItem || isValuableItem)
             {
@@ -544,6 +580,13 @@ namespace Radar
         {
             if (Time.time - RadarLastUpdateTime < Radar.radarScanInterval.Value)
                 return;
+
+            if (Radar.radarListReloadRequested)
+            {
+                LoadCustomLootList();
+                Radar.radarListReloadRequested = false;
+                UpdateLootList();
+            }
 
             Vector2 center = new Vector2(_player.Transform.position.x, _player.Transform.position.z);
             var latestActiveLootOnRadar = _lootTree?.QueryRange(center, Radar.radarOuterRangeConfig.Value);

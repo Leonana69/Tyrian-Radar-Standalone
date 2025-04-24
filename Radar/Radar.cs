@@ -22,6 +22,8 @@ namespace Radar
         const string colorSettings = "Color Settings";
         const string radarSettings = "Radar Settings";
 
+        public static bool radarListReloadRequested = false;
+
         public static ConfigEntry<string> radarLanguage;
         public static ConfigEntry<bool> radarEnableConfig;
         public static ConfigEntry<bool> radarEnablePulseConfig;
@@ -29,6 +31,7 @@ namespace Radar
         public static ConfigEntry<bool> radarEnableLootConfig;
         public static ConfigEntry<bool> radarEnableFireModeConfig;
         public static ConfigEntry<bool> radarEnableCompassConfig;
+        public static ConfigEntry<KeyboardShortcut> radarReloadListShortCutConfig;
         public static ConfigEntry<KeyboardShortcut> radarEnableShortCutConfig;
         public static ConfigEntry<KeyboardShortcut> radarEnableCorpseShortCutConfig;
         public static ConfigEntry<KeyboardShortcut> radarEnableLootShortCutConfig;
@@ -74,6 +77,7 @@ namespace Radar
                 new AcceptableValueList<string>("EN", "ZH", "RU", "KO")));
 
             radarEnableConfig = Config.Bind(baseSettings, Locales.GetTranslatedString("radar_enable"), true);
+            radarReloadListShortCutConfig = Config.Bind(baseSettings, Locales.GetTranslatedString("radar_reload_list_shortcut"), new KeyboardShortcut(KeyCode.F8));
             radarEnableShortCutConfig = Config.Bind(baseSettings, Locales.GetTranslatedString("radar_enable_shortcut"), new KeyboardShortcut(KeyCode.F10));
             radarEnablePulseConfig = Config.Bind(baseSettings, Locales.GetTranslatedString("radar_pulse_enable"), true, Locales.GetTranslatedString("radar_pulse_enable_info"));
             radarEnableFireModeConfig = Config.Bind(baseSettings, Locales.GetTranslatedString("radar_fire_mode_enable"), false, Locales.GetTranslatedString("radar_fire_mode_enable_info"));
