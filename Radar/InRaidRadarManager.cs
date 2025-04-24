@@ -9,6 +9,7 @@ namespace Radar
         static public GameObject? _radarGo;
 
         private bool _enableSCDown = false;
+        private bool _reloadSCDown = false;
         private bool _corpseSCDown = false;
         private bool _lootSCDown = false;
 
@@ -63,6 +64,17 @@ namespace Radar
 
         private void Update()
         {
+            // enable radar shortcut process
+            if (!_reloadSCDown && Radar.radarReloadListShortCutConfig.Value.IsDown())
+            {
+                Radar.radarListReloadRequested = true;
+                _reloadSCDown = true;
+            }
+            if (!Radar.radarReloadListShortCutConfig.Value.IsDown())
+            {
+                _reloadSCDown = false;
+            }
+
             // enable radar shortcut process
             if (!_enableSCDown && Radar.radarEnableShortCutConfig.Value.IsDown())
             {

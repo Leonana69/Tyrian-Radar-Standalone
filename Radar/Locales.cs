@@ -12,6 +12,7 @@ namespace Radar
 {
             {"EN", new Dictionary<string, string>{
                 {"radar_enable","Radar Enabled"},
+                {"radar_reload_list_shortcut","Short cut for requesting radar list reload"},
                 {"radar_enable_shortcut","Short cut for enable/disable radar"},
                 {"radar_pulse_enable","Radar Pulse Enabled"},
                 {"radar_pulse_enable_info","Adds the radar scan effect"},
@@ -54,6 +55,7 @@ namespace Radar
             }},
             {"ZH", new Dictionary<string, string>{
                 {"radar_enable", "开启雷达"},
+                {"radar_reload_list_shortcut","Short cut for requesting radar list reload"},
                 {"radar_enable_shortcut", "雷达开启热键"},
                 {"radar_pulse_enable", "开启雷达扫描动画"},
                 {"radar_pulse_enable_info", "增加转圈扫描效果"},
@@ -96,6 +98,7 @@ namespace Radar
             }},
             {"RU", new Dictionary<string, string>{
                 {"radar_enable", "Радар"},
+                {"radar_reload_list_shortcut","Short cut for requesting radar list reload"},
                 {"radar_enable_shortcut","Кнопка для включения/выключения радара"},
                 {"radar_pulse_enable", "Радарный импульс"},
                 {"radar_pulse_enable_info","Добавляет эффект радарного сканирования"},
@@ -138,6 +141,7 @@ namespace Radar
             }},
             {"KO", new Dictionary<string, string>{
                 {"radar_enable","레이더 활성화"},
+                {"radar_reload_list_shortcut","Short cut for requesting radar list reload"},
                 {"radar_enable_shortcut","레이더 활성화/비활성화 단축키"},
                 {"radar_pulse_enable","레이더 스캔(펄스) 효과 활성화"},
                 {"radar_pulse_enable_info","레이더 스캔(펄스) 효과 추가"},
