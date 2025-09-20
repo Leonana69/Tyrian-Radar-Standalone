@@ -74,6 +74,9 @@ namespace Radar
         private GameObject _fpsCameraObject;
 
         // FPS Camera (this.transform.parent) -> RadarHUD (this.transform) -> RadarBaseTransform (transform.Find("Radar").transform) -> RadarBorderTransform
+
+        private IReadOnlyDictionary<EFT.MongoID, EFT.EWishlistGroup> _wishlist;
+
         private void Awake()
         {
             if (debugInfo)
@@ -96,6 +99,8 @@ namespace Radar
 
             _player = _gameWorld.MainPlayer;
             _fpsCameraObject = GameObject.Find(FPS_CAMERA_NAME);
+
+            _wishlist = _player.Profile?.WishlistManager.GetWishlist();
 
             RadarBaseTransform = (transform.Find("Radar") as RectTransform)!;
             RadarBase = RadarBaseTransform.gameObject;
@@ -385,9 +390,29 @@ namespace Radar
                     RadarBaseTransform.localScale = _radarScaleStart * Radar.radarSizeConfig.Value;
             }
 
-            if (e != null && (e.ChangedSetting == Radar.radarEnableLootConfig || e.ChangedSetting == Radar.radarLootThreshold))
+            if (e != null && (e.ChangedSetting == Radar.radarEnableLootConfig))
             {
                 if (Radar.radarEnableLootConfig.Value)
+                    UpdateLootList();
+                else
+                {
+                    ClearLoot();
+                }
+            }
+
+            if (e != null && (e.ChangedSetting == Radar.radarEnableWishlistLootConfig || e.ChangedSetting == Radar.radarEnableValuableLootConfig))
+            {
+                if (!Radar.radarEnableWishlistLootConfig.Value && !Radar.radarEnableValuableLootConfig.Value)
+                    ClearLoot();
+                else
+                {
+                    UpdateLootList();
+                }
+            }
+
+            if (e != null && (e.ChangedSetting == Radar.radarLootThreshold))
+            {
+                if (Radar.radarEnableValuableLootConfig.Value)
                     UpdateLootList();
                 else
                 {
@@ -442,12 +467,17 @@ namespace Radar
             // New item has high price && has not been added
             if (CheckPrice(args.Item) && !_lootInList.Contains(itemOwner.ID))
                 AddLoot(itemOwner.ID, itemOwner.Items.First(), _containerTransforms[itemOwner.ID]);
+            else if (CheckWishlist(args.Item) && !_lootInList.Contains(itemOwner.ID))
+                AddLoot(itemOwner.ID, itemOwner.Items.First(), _containerTransforms[itemOwner.ID]);
         }
 
         private void OnContainerRemoveItemEvent(IItemOwner itemOwner, GEventArgs3 args)
         {
             if (CheckPrice(args.Item) && !CheckPrice(itemOwner.Items.First()))
                 RemoveLoot(itemOwner.ID);
+            else if (CheckWishlist(args.Item) && !CheckWishlist(itemOwner.Items.First()))
+                RemoveLoot(itemOwner.ID);
+
         }
 
         private bool CheckPrice(Item item)
@@ -489,13 +519,45 @@ namespace Radar
             return highestPrice > Radar.radarLootThreshold.Value;
         }
 
+        private bool CheckWishlist(Item item)
+        {
+            if (item.IsContainer)
+            {
+                var allItems = item.GetAllItems();
+
+                foreach (var subItem in allItems)
+                {
+                    //Debug.LogError(subItem.Name);
+                    if (_wishlist.Keys.Contains(subItem.TemplateId))
+                    {
+                        if (_wishlist[subItem.TemplateId] == EWishlistGroup.Other)
+                            //Debug.LogError("Wishlisted");
+                            return true;
+                    }
+                }
+            }
+            else
+            {
+                if (_wishlist.Keys.Contains(item.TemplateId))
+                {
+                    if (_wishlist[item.TemplateId] == EWishlistGroup.Other)
+                        //Debug.LogError("Wishlisted");
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
         public void AddLoot(string id, Item item, Transform transform, bool lazyUpdate = false)
         {
             //Debug.LogError($"AddLoot {item.IsContainer} {item.Name} {item.LocalizedName()} {transform.position}");
             bool isCustomItem = _customLoots?.items.Contains(item.TemplateId) ?? false;
-            bool isValuableItem = !item.Name.StartsWith(PLAYER_INVENTORY_PREFIX) && CheckPrice(item);
+            bool isValuableItem = Radar.radarEnableValuableLootConfig.Value && !item.Name.StartsWith(PLAYER_INVENTORY_PREFIX) && CheckPrice(item);
+            bool isWishlisted = Radar.radarEnableWishlistLootConfig.Value && !item.Name.StartsWith(PLAYER_INVENTORY_PREFIX) && CheckWishlist(item);
 
-            if (isCustomItem || isValuableItem)
+
+            if (isCustomItem || isValuableItem || isWishlisted)
             {
                 
                 var blip = new BlipOther(id, transform, lazyUpdate);

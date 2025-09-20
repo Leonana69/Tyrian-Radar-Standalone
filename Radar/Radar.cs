@@ -27,7 +27,9 @@ namespace Radar
         public static ConfigEntry<bool> radarEnableConfig;
         public static ConfigEntry<bool> radarEnablePulseConfig;
         public static ConfigEntry<bool> radarEnableCorpseConfig;
+        public static ConfigEntry<bool> radarEnableValuableLootConfig;
         public static ConfigEntry<bool> radarEnableLootConfig;
+        public static ConfigEntry<bool> radarEnableWishlistLootConfig;
         public static ConfigEntry<bool> radarEnableFireModeConfig;
         public static ConfigEntry<bool> radarEnableCompassConfig;
         public static ConfigEntry<bool> radarEnableMinefieldConfig;
@@ -86,6 +88,8 @@ namespace Radar
             radarEnableCorpseConfig = Config.Bind(advancedSettings, Locales.GetTranslatedString("radar_corpse_enable"), false);
             radarEnableCorpseShortCutConfig = Config.Bind(advancedSettings, Locales.GetTranslatedString("radar_corpse_shortcut"), new KeyboardShortcut(KeyCode.F11));
             radarEnableLootConfig = Config.Bind(advancedSettings, Locales.GetTranslatedString("radar_loot_enable"), false);
+            radarEnableValuableLootConfig = Config.Bind(advancedSettings, Locales.GetTranslatedString("radar_valuable_loot_enable"), false);
+            radarEnableWishlistLootConfig = Config.Bind(advancedSettings, Locales.GetTranslatedString("radar_wishlist_enable"), false);
             radarEnableLootShortCutConfig = Config.Bind(advancedSettings, Locales.GetTranslatedString("radar_loot_shortcut"), new KeyboardShortcut(KeyCode.F9));
             radarLootPerSlotConfig = Config.Bind(advancedSettings, Locales.GetTranslatedString("radar_loot_per_slot"), false);
             radarSizeConfig = Config.Bind<float>(radarSettings, Locales.GetTranslatedString("radar_hud_size"), 0.8f,
