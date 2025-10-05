@@ -185,7 +185,20 @@ namespace Radar
             }
             else
             {
-                blipImage.color = Radar.lootBlipColor.Value;
+                switch (_type)
+                {
+                    case 1:
+                        blipImage.color = Color.black;
+                        break;
+
+                    case 2:
+                        blipImage.color = Radar.wishListLootBlipColor.Value;
+                        break;
+
+                    default:
+                        blipImage.color = Radar.lootBlipColor.Value;
+                        break;
+                }
             }
 
             float blipSize = Radar.radarBlipSizeConfig.Value * 3f;

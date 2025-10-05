@@ -54,6 +54,7 @@ namespace Radar
         public static ConfigEntry<Color> bearBlipColor;
         public static ConfigEntry<Color> scavBlipColor;
         public static ConfigEntry<Color> lootBlipColor;
+        public static ConfigEntry<Color> wishListLootBlipColor;
         public static ConfigEntry<Color> corpseBlipColor;
         public static ConfigEntry<Color> backgroundColor;
         public static ConfigEntry<Color> minefieldColor;
@@ -118,6 +119,7 @@ namespace Radar
             usecBlipColor = Config.Bind<Color>(colorSettings, Locales.GetTranslatedString("radar_usec_blip_color"), new Color(1f, 1f, 0f));
             bearBlipColor = Config.Bind<Color>(colorSettings, Locales.GetTranslatedString("radar_bear_blip_color"), new Color(1f, 0.5f, 0f));
             lootBlipColor = Config.Bind<Color>(colorSettings, Locales.GetTranslatedString("radar_loot_blip_color"), new Color(0.9f, 0.5f, 0.5f));
+            wishListLootBlipColor = Config.Bind<Color>(colorSettings, Locales.GetTranslatedString("radar_wishlist_loot_blip_color"), new Color(0.9f, 0.8f, 0.5f));
             corpseBlipColor = Config.Bind<Color>(colorSettings, Locales.GetTranslatedString("radar_corpse_blip_color"), new Color(0.5f, 0.5f, 0.5f));
             backgroundColor = Config.Bind<Color>(colorSettings, Locales.GetTranslatedString("radar_background_color"), new Color(0f, 0.7f, 0.85f));
             minefieldColor = Config.Bind<Color>(colorSettings, Locales.GetTranslatedString("radar_minefield_color"), new Color(0.7f, 0.7f, 0.7f, 0.3f));

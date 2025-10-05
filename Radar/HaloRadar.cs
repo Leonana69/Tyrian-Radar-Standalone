@@ -477,7 +477,6 @@ namespace Radar
                 RemoveLoot(itemOwner.ID);
             else if (CheckWishlist(args.Item) && !CheckWishlist(itemOwner.Items.First()))
                 RemoveLoot(itemOwner.ID);
-
         }
 
         private bool CheckPrice(Item item)
@@ -559,26 +558,12 @@ namespace Radar
 
             if (isCustomItem || isValuableItem || isWishlisted)
             {
-                
-                var blip = new BlipOther(id, transform, lazyUpdate);
+                var blip = new BlipOther(id, transform, lazyUpdate, isWishlisted ? 2 : 0);
                 _lootCustomObject.Add(blip);
                 _lootTree?.Insert(blip);
                 _lootInList.Add(id);
             }
         }
-
-        public void UpdateFireTime(string id)
-        {
-            if (_enemyList.ContainsKey(id))
-                _enemyList[id].UpdateLastFireTime(Time.time);
-        }
-
-        public void RemoveLootByKey(int key)
-        {
-            LootItem item = _gameWorld.LootItems.GetByKey(key);
-            RemoveLoot(item.ItemId);
-        }
-
         public void RemoveLoot(string id)
         {
             Vector2 point = Vector2.zero;
@@ -596,6 +581,18 @@ namespace Radar
             //Debug.LogError($"Remove Loot: {id}");
             _lootTree?.Remove(point, id);
             _lootInList.Remove(id);
+        }
+
+        public void UpdateFireTime(string id)
+        {
+            if (_enemyList.ContainsKey(id))
+                _enemyList[id].UpdateLastFireTime(Time.time);
+        }
+
+        public void RemoveLootByKey(int key)
+        {
+            LootItem item = _gameWorld.LootItems.GetByKey(key);
+            RemoveLoot(item.ItemId);
         }
 
         private void TogglePulseAnimation(bool enable)
@@ -736,7 +733,7 @@ namespace Radar
                 obj.Update(false);
 
             foreach (var obj in _mineObject)
-                obj.Update(true, Color.black);
+                obj.Update(true);
 
             foreach (var obj in _mineRegion)
                 obj.UpdateVisual();
