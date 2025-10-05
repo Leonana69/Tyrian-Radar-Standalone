@@ -464,19 +464,53 @@ namespace Radar
 
         private void OnContainerAddItemEvent(IItemOwner itemOwner, GEventArgs2 args)
         {
-            // New item has high price && has not been added
-            if (CheckPrice(args.Item) && !_lootInList.Contains(itemOwner.ID))
-                AddLoot(itemOwner.ID, itemOwner.Items.First(), _containerTransforms[itemOwner.ID]);
-            else if (CheckWishlist(args.Item) && !_lootInList.Contains(itemOwner.ID))
-                AddLoot(itemOwner.ID, itemOwner.Items.First(), _containerTransforms[itemOwner.ID]);
+            bool itemIsWishlisted = CheckWishlist(args.Item);
+            bool itemIsValuable = CheckPrice(args.Item);
+            bool containerInList = _lootInList.Contains(itemOwner.ID);
+
+            // If new item is wishlisted or valuable
+            if (itemIsWishlisted || itemIsValuable)
+            {
+                if (!containerInList)
+                {
+                    // Container not in list, add it with appropriate priority
+                    AddLoot(itemOwner.ID, itemOwner.Items.First(), _containerTransforms[itemOwner.ID]);
+                }
+                else if (itemIsWishlisted)
+                {
+                    // Container already in list but new item is wishlisted - need to update priority
+                    bool containerHasWishlist = CheckWishlist(itemOwner.Items.First());
+                    if (containerHasWishlist)
+                    {
+                        // Update to wishlist priority (2) if not already
+                        UpdateLootPriority(itemOwner.ID, 2);
+                    }
+                }
+            }
         }
 
         private void OnContainerRemoveItemEvent(IItemOwner itemOwner, GEventArgs3 args)
         {
-            if (CheckPrice(args.Item) && !CheckPrice(itemOwner.Items.First()))
+            bool removedItemIsWishlisted = CheckWishlist(args.Item);
+            bool removedItemIsValuable = CheckPrice(args.Item);
+
+            if (!removedItemIsWishlisted && !removedItemIsValuable)
+                return;
+
+            // Check what's left in the container
+            bool containerStillHasWishlist = CheckWishlist(itemOwner.Items.First());
+            bool containerStillHasValue = CheckPrice(itemOwner.Items.First());
+
+            if (!containerStillHasWishlist && !containerStillHasValue)
+            {
+                // Nothing valuable left, remove from list
                 RemoveLoot(itemOwner.ID);
-            else if (CheckWishlist(args.Item) && !CheckWishlist(itemOwner.Items.First()))
-                RemoveLoot(itemOwner.ID);
+            }
+            else if (removedItemIsWishlisted && !containerStillHasWishlist && containerStillHasValue)
+            {
+                // Removed wishlist item, only valuable items remain - downgrade priority to 0
+                UpdateLootPriority(itemOwner.ID, 0);
+            }
         }
 
         private bool CheckPrice(Item item)
@@ -552,18 +586,32 @@ namespace Radar
         {
             //Debug.LogError($"AddLoot {item.IsContainer} {item.Name} {item.LocalizedName()} {transform.position}");
             bool isCustomItem = _customLoots?.items.Contains(item.TemplateId) ?? false;
-            bool isValuableItem = Radar.radarEnableValuableLootConfig.Value && !item.Name.StartsWith(PLAYER_INVENTORY_PREFIX) && CheckPrice(item);
             bool isWishlisted = Radar.radarEnableWishlistLootConfig.Value && !item.Name.StartsWith(PLAYER_INVENTORY_PREFIX) && CheckWishlist(item);
+            bool isValuableItem = Radar.radarEnableValuableLootConfig.Value && !item.Name.StartsWith(PLAYER_INVENTORY_PREFIX) && CheckPrice(item);
 
-
-            if (isCustomItem || isValuableItem || isWishlisted)
+            // Wishlist has highest priority (2), custom items and valuable items get priority 0
+            if (isWishlisted || isCustomItem || isValuableItem)
             {
-                var blip = new BlipOther(id, transform, lazyUpdate, isWishlisted ? 2 : 0);
+                int priority = isWishlisted ? 2 : 0;
+                var blip = new BlipOther(id, transform, lazyUpdate, priority);
                 _lootCustomObject.Add(blip);
                 _lootTree?.Insert(blip);
                 _lootInList.Add(id);
             }
         }
+
+        private void UpdateLootPriority(string id, int newPriority)
+        {
+            foreach (var loot in _lootCustomObject)
+            {
+                if (loot._id == id)
+                {
+                    loot.UpdatePriority(newPriority);
+                    break;
+                }
+            }
+        }
+
         public void RemoveLoot(string id)
         {
             Vector2 point = Vector2.zero;

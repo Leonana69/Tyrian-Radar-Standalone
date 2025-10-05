@@ -154,6 +154,19 @@ namespace Radar
             _type = type;
         }
 
+        public void UpdatePriority(int newType)
+        {
+            if (_type != newType)
+            {
+                _type = newType;
+                // Force visual update with the new priority
+                if (blipImage != null)
+                {
+                    UpdateBlipImage();
+                }
+            }
+        }
+
         private void UpdateBlipImage(Color? blipColor = null)
         {
             if (blip == null || blipImage == null)
