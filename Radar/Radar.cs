@@ -11,7 +11,7 @@ using System.IO;
 
 namespace Radar
 {
-    [BepInPlugin("Tyrian.Radar", "Radar", "1.2.0")]
+    [BepInPlugin("com.Leonana69.Radar", "Leonana69-Radar", "1.2.1")]
     public class Radar : BaseUnityPlugin
     {
         internal static Radar Instance { get; private set; }
