@@ -28,7 +28,7 @@ internal static class TraderClassExtensions
             Result<SupplyData> result = await Session.GetSupplyData(trader.Id);
             if (result.Succeed)
             {
-                trader.supplyData_0 = result.Value;
+                trader.SupplyData_0 = result.Value;
             }
             else
             {
@@ -105,7 +105,14 @@ internal static class FleaPriceCache
 
     private static async Task<double?> QueryAndTryUpsertPrice(string templateId)
     {
-        string response = await QueryPrice(templateId);
+        string response;
+        try
+        {
+            response = await QueryPrice(templateId);
+        } catch (Exception ex)
+        {
+            return null;
+        }
 
         if (!string.IsNullOrEmpty(response) && response != "null")
         {
@@ -211,7 +218,7 @@ class ItemExtensions : MonoBehaviour
 
     public static TraderOffer? GetTraderOffer(Item item, TraderClass trader)
     {
-        if (trader.supplyData_0 != null)
+        if (trader.SupplyData_0 != null)
         {
             var result = trader.GetUserItemPrice(item);
             return result is null ? null : new(

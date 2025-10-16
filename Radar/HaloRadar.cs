@@ -62,7 +62,7 @@ namespace Radar
 
         private readonly HashSet<string> _containerSet = new HashSet<string>();
 
-        private CustomLootList _customLoots;
+        //private CustomLootList _customLoots;
 
         private bool _compassOn = false;
         private GameObject _compassGlass;
@@ -127,32 +127,9 @@ namespace Radar
             //Debug.LogError($"& RBT: {RadarBaseTransform.position} {RadarBaseTransform.localPosition} {RadarBaseTransform.rotation} {RadarBaseTransform.localRotation} {RadarBaseTransform.localScale}");
             //Debug.LogError($"& BOD: {RadarBorderTransform.position} {RadarBorderTransform.localPosition} {RadarBorderTransform.rotation} {RadarBorderTransform.localRotation} {RadarBorderTransform.localScale}");
             
-            // Load custom loot list
-            LoadCustomLootList();
             ItemExtensions.Init(this);
 
             Radar.Log.LogInfo("Radar loaded");
-        }
-
-        private void LoadCustomLootList()
-        {
-            string filePath = Path.Combine(Application.dataPath, "..\\BepInEx\\plugins\\radar-list.json");
-            if (File.Exists(filePath))
-            {
-                try
-                {
-                    string jsonContent = File.ReadAllText(filePath);
-                    _customLoots = JsonConvert.DeserializeObject<CustomLootList>(jsonContent)!;
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogError($"Failed to read or parse settings file: {ex.Message}");
-                }
-            }
-            else
-            {
-                Debug.LogError("Custom loot file not found.");
-            }
         }
 
         private void InitRadar()
@@ -390,7 +367,7 @@ namespace Radar
                     RadarBaseTransform.localScale = _radarScaleStart * Radar.radarSizeConfig.Value;
             }
 
-            if (e != null && (e.ChangedSetting == Radar.radarEnableLootConfig))
+            if (e != null && (e.ChangedSetting == Radar.radarEnableLootConfig || e.ChangedSetting == Radar.radarEnableWishlistLootConfig || e.ChangedSetting == Radar.radarLootPerSlotConfig))
             {
                 if (Radar.radarEnableLootConfig.Value)
                     UpdateLootList();
@@ -400,19 +377,9 @@ namespace Radar
                 }
             }
 
-            if (e != null && (e.ChangedSetting == Radar.radarEnableWishlistLootConfig || e.ChangedSetting == Radar.radarEnableValuableLootConfig))
-            {
-                if (!Radar.radarEnableWishlistLootConfig.Value && !Radar.radarEnableValuableLootConfig.Value)
-                    ClearLoot();
-                else
-                {
-                    UpdateLootList();
-                }
-            }
-
             if (e != null && (e.ChangedSetting == Radar.radarLootThreshold))
             {
-                if (Radar.radarEnableValuableLootConfig.Value)
+                if (Radar.radarEnableLootConfig.Value)
                     UpdateLootList();
                 else
                 {
@@ -585,12 +552,11 @@ namespace Radar
         public void AddLoot(string id, Item item, Transform transform, bool lazyUpdate = false)
         {
             //Debug.LogError($"AddLoot {item.IsContainer} {item.Name} {item.LocalizedName()} {transform.position}");
-            bool isCustomItem = _customLoots?.items.Contains(item.TemplateId) ?? false;
             bool isWishlisted = Radar.radarEnableWishlistLootConfig.Value && !item.Name.StartsWith(PLAYER_INVENTORY_PREFIX) && CheckWishlist(item);
-            bool isValuableItem = Radar.radarEnableValuableLootConfig.Value && !item.Name.StartsWith(PLAYER_INVENTORY_PREFIX) && CheckPrice(item);
+            bool isValuableItem = Radar.radarEnableLootConfig.Value && !item.Name.StartsWith(PLAYER_INVENTORY_PREFIX) && CheckPrice(item);
 
             // Wishlist has highest priority (2), custom items and valuable items get priority 0
-            if (isWishlisted || isCustomItem || isValuableItem)
+            if (isWishlisted || isValuableItem)
             {
                 int priority = isWishlisted ? 2 : 0;
                 var blip = new BlipOther(id, transform, lazyUpdate, priority);

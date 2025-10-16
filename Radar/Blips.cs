@@ -59,12 +59,21 @@ namespace Radar
             if (_isDead)
             {
                 targetBlips = AssetFileManager.DeadEnemyBlips;
-                if (outline == null)
+                if (outline == null && Radar.radarEnableCorpseTypeConfig.Value)
                 {
                     outline = blipImage.GetOrAddComponent<Outline>();
                     outline.effectDistance = new Vector2(1, -1);
+                } else if (outline != null && !Radar.radarEnableCorpseTypeConfig.Value)
+                {
+                    Object.Destroy(outline);
+                    outline = null;
                 }
-                outline.effectColor = blipImage.color;
+
+                if (outline != null)
+                {
+                    outline.effectColor = blipImage.color;
+                }
+                
                 blipImage.color = Radar.corpseBlipColor.Value;
             }
 
