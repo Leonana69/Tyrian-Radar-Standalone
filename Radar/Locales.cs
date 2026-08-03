@@ -1,14 +1,13 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Collections.Generic;
 
 namespace Radar
 {
-    internal class Locales
+    /// <summary>Config key and description strings for every supported UI language.</summary>
+    internal static class Locales
     {
-        private static Dictionary<string, Dictionary<string, string>> translations = new Dictionary<string, Dictionary<string, string>>()
+        private const string FallbackLanguage = "EN";
+
+        private static readonly Dictionary<string, Dictionary<string, string>> Translations = new Dictionary<string, Dictionary<string, string>>()
 {
             {"EN", new Dictionary<string, string>{
                 {"radar_enable","Radar Enabled"},
@@ -212,24 +211,19 @@ namespace Radar
             }},
         };
 
+        /// <summary>
+        /// The string for <paramref name="key"/> in the selected language, falling back to English
+        /// for an unsupported language or an untranslated key.
+        /// </summary>
         public static string GetTranslatedString(string key)
         {
-            // Default to English if the selected language is not found
-            string lang = Radar.radarLanguage.Value;
-            if (!translations.ContainsKey(lang))
-            {
-                lang = "EN";
-            }
+            string language = RadarConfig.Language.Value;
 
-            // Default to the original English text if the translation is not found
-            if (translations[lang].ContainsKey(key))
-            {
-                return translations[lang][key];
-            }
-            else
-            {
-                return translations["EN"][key];
-            }
+            if (Translations.TryGetValue(language, out Dictionary<string, string> strings) &&
+                strings.TryGetValue(key, out string translated))
+                return translated;
+
+            return Translations[FallbackLanguage][key];
         }
     }
 }

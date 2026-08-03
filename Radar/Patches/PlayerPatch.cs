@@ -1,4 +1,4 @@
-﻿using EFT;
+using EFT;
 using EFT.InventoryLogic;
 using JetBrains.Annotations;
 using SPT.Reflection.Patching;
@@ -7,28 +7,21 @@ using UnityEngine;
 
 namespace Radar.Patches
 {
+    /// <summary>
+    /// Lights a contact up when it fires, which is what Fire Mode displays instead of live positions.
+    /// </summary>
     internal class PlayerOnMakingShotPatch : ModulePatch
     {
-        protected override MethodBase GetTargetMethod()
-        {
-            return typeof(Player).GetMethod("OnMakingShot", BindingFlags.Public | BindingFlags.Instance);
-        }
+        protected override MethodBase GetTargetMethod() =>
+            typeof(Player).GetMethod("OnMakingShot", BindingFlags.Public | BindingFlags.Instance);
 
         [PatchPostfix]
-        static void PostFix(Player __instance, [NotNull] IWeapon weapon, Vector3 force)
+        private static void PostFix(Player __instance, [NotNull] IWeapon weapon, Vector3 force)
         {
-            //UnityEngine.Debug.LogError($"Patched Player {__instance == null}");
-            var radarGo = InRaidRadarManager._radarGo;
-            if (radarGo == null)
-            {
+            if (__instance == null)
                 return;
-            }
 
-            var radar = radarGo.GetComponent<HaloRadar>();
-            if (radar != null && radar.inGame && __instance != null)
-            {
-                radar.UpdateFireTime(__instance.ProfileId);
-            }
+            InRaidRadarManager.LiveRadar?.UpdateFireTime(__instance.ProfileId);
         }
     }
 }

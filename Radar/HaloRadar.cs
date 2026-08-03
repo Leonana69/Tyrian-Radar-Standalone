@@ -1,93 +1,65 @@
-﻿using EFT;
+using BepInEx.Configuration;
+using Comfort.Common;
+using EFT;
+using EFT.InventoryLogic;
 using System.Collections;
 using System.Collections.Generic;
-using Comfort.Common;
-using UnityEngine;
-using UnityEngine.UI;
-using EFT.Interactive;
 using System.Linq;
-using BepInEx.Configuration;
-using EFT.InventoryLogic;
-using System.IO;
-using Newtonsoft.Json;
-using System;
-using SPT.Reflection.Utils;
-using System.Reflection;
-using System.Security.Policy;
+using UnityEngine;
 
 namespace Radar
 {
-    [System.Serializable]
-    public class CustomLootList
-    {
-        public HashSet<string> items { get; set; } = new HashSet<string>();
-    }
+    /// <summary>
+    /// Drives the radar: owns the HUD layout, the trackers and the per-frame update loop.
+    /// Attached to the HUD prefab instance by <see cref="InRaidRadarManager"/>.
+    /// </summary>
     public class HaloRadar : MonoBehaviour
     {
-        private const float DEFAULT_SCALE = 1f;
-        private const string PLAYER_INVENTORY_PREFIX = "55d7217a4bdc2d86028b456d";
-        private const string DRAWER_PREFIX = "578f87b7245977356274f2cd";
-        private const string FPS_CAMERA_NAME = "FPS Camera";
-        private const string COMPASS_GLASS_NAME = "compas_glass_LOD0";
+        private const string FpsCameraName = "FPS Camera";
 
-        private readonly bool debugInfo = true;
+        /// <summary>Fire Mode sweeps players far more often, so muzzle flashes register promptly.</summary>
+        private const float FireModeScanInterval = 0.1f;
 
-        private GameWorld _gameWorld;
-        private Player _player;
-        public bool inGame = false;
+        /// <summary>Slowest the pulse sweep may run, in seconds per revolution.</summary>
+        private const float MinPulseInterval = 1f;
 
-        public static RectTransform RadarBorderTransform { get; private set; }
-        public static RectTransform RadarBaseTransform { get; private set; }
-        public static GameObject RadarBase { get; private set; }
+        /// <summary>False until a raid is live, so the Harmony patches know not to call in.</summary>
+        public bool InGame { get; private set; }
 
-        private RectTransform _radarPulseTransform;
+        private readonly Dictionary<string, BlipPlayer> _players = new Dictionary<string, BlipPlayer>();
 
-        private Coroutine _pulseCoroutine;
-        private float _radarPulseInterval = 1f;
+        private GameWorld _gameWorld = null!;
+        private Player _player = null!;
+        private RadarHudLayout _layout = null!;
+        private LootTracker _loot = null!;
+        private MinefieldTracker _minefield = null!;
+        private ExfilTracker _exfil = null!;
 
-        private Vector3 _radarScaleStart;
+        private bool _ready;
+        private Coroutine? _pulseCoroutine;
+        private float _pulseInterval = MinPulseInterval;
+        private float _lastPlayerScanTime;
 
-        public static float RadarLastUpdateTime = 0;
+        // --- Called by the Harmony patches -------------------------------------------------------
 
-        private readonly Dictionary<string, BlipPlayer> _enemyList = new Dictionary<string, BlipPlayer>();
+        public void AddLoot(string id, Item item, Transform transform, bool lazyUpdate = false) =>
+            _loot.Add(id, item, transform, lazyUpdate);
 
-        private readonly List<BlipOther> _lootCustomObject = new List<BlipOther>();
-        private readonly HashSet<string> _lootInList = new HashSet<string>();
-        private readonly Dictionary<string, Transform> _containerTransforms = new Dictionary<string, Transform>();
-        private Quadtree _lootTree;
-        private List<BlipOther> _activeLootOnRadar;
-        private readonly List<BlipOther> _lootToHide = new List<BlipOther>();
+        public void RemoveLootByKey(int key) => _loot.RemoveByKey(key);
 
-        private readonly List<BlipOther> _mineObject = new List<BlipOther>();
-        private readonly List<RadarRegion> _mineRegion = new List<RadarRegion>();
+        public void UpdateFireTime(string profileId)
+        {
+            if (_players.TryGetValue(profileId, out BlipPlayer blip))
+                blip.UpdateLastFireTime(Time.time);
+        }
 
-        private readonly List<BlipOther> _exfiltrationObject = new List<BlipOther>();
-
-        private readonly HashSet<string> _containerSet = new HashSet<string>();
-
-        //private CustomLootList _customLoots;
-
-        private bool _compassOn = false;
-        private GameObject _compassGlass;
-        private Canvas _radarCanvas;
-        private Image _radarBorderImage;
-        private Image _radarPulseImage;
-        private Image _radarBackgroundImage;
-        private Transform _radarBackgroundTransform;
-        private GameObject _fpsCameraObject;
-
-        // FPS Camera (this.transform.parent) -> RadarHUD (this.transform) -> RadarBaseTransform (transform.Find("Radar").transform) -> RadarBorderTransform
-
-        private IReadOnlyDictionary<EFT.MongoID, EFT.EWishlistGroup> _wishlist;
+        // --- Unity lifecycle ---------------------------------------------------------------------
 
         private void Awake()
         {
-            if (debugInfo)
-                Debug.LogError("# Awake");
-
             if (!Singleton<GameWorld>.Instantiated)
             {
-                Radar.Log.LogWarning("GameWorld singleton not found.");
+                RadarPlugin.Log.LogWarning("GameWorld singleton not found.");
                 Destroy(gameObject);
                 return;
             }
@@ -95,727 +67,202 @@ namespace Radar
             _gameWorld = Singleton<GameWorld>.Instance;
             if (_gameWorld.MainPlayer == null)
             {
-                Radar.Log.LogWarning("MainPlayer is null.");
+                RadarPlugin.Log.LogWarning("MainPlayer is null.");
                 Destroy(gameObject);
                 return;
             }
 
             _player = _gameWorld.MainPlayer;
-            _fpsCameraObject = GameObject.Find(FPS_CAMERA_NAME);
 
-            _wishlist = _player.Profile?.WishlistManager.GetWishlist();
+            _layout = new RadarHudLayout(transform, GameObject.Find(FpsCameraName));
+            _loot = new LootTracker(_gameWorld, _player);
+            _minefield = new MinefieldTracker(_gameWorld);
+            _exfil = new ExfilTracker(_player);
 
-            RadarBaseTransform = (transform.Find("Radar") as RectTransform)!;
-            RadarBase = RadarBaseTransform.gameObject;
-            _radarScaleStart = RadarBaseTransform.localScale;
+            RadarRegion.FillColor = RadarConfig.MinefieldColor.Value;
 
-            RadarBorderTransform = transform.Find("Radar/RadarBorder") as RectTransform;
-            RadarBorderTransform.SetAsLastSibling();
-            _radarBorderImage = RadarBorderTransform.GetComponent<Image>();
-            _radarBorderImage.color = Radar.backgroundColor.Value;
+            ItemPricing.Init(this);
 
-            _radarPulseTransform = transform.Find("Radar/RadarPulse") as RectTransform;
-            _radarPulseImage = _radarPulseTransform.GetComponent<Image>();
-            _radarPulseImage.color = Radar.backgroundColor.Value;
-
-            _radarBackgroundTransform = transform.Find("Radar/RadarBackground");
-            _radarBackgroundImage = _radarBackgroundTransform.GetComponent<Image>();
-            _radarBackgroundImage.color = Radar.backgroundColor.Value;
-
-            _radarCanvas = GetComponentInChildren<Canvas>();
-
-            RadarRegion.initColor = Radar.minefieldColor.Value;
-
-            //Debug.LogError($"& HUD: {this.transform.position} {this.transform.localPosition} {this.transform.rotation} {this.transform.localRotation} {this.transform.localScale}");
-            //Debug.LogError($"& RBT: {RadarBaseTransform.position} {RadarBaseTransform.localPosition} {RadarBaseTransform.rotation} {RadarBaseTransform.localRotation} {RadarBaseTransform.localScale}");
-            //Debug.LogError($"& BOD: {RadarBorderTransform.position} {RadarBorderTransform.localPosition} {RadarBorderTransform.rotation} {RadarBorderTransform.localRotation} {RadarBorderTransform.localScale}");
-            
-            ItemExtensions.Init(this);
-
-            Radar.Log.LogInfo("Radar loaded");
-        }
-
-        private void InitRadar()
-        {
-            if (Radar.radarEnableCompassConfig.Value)
-                InitCompassRadar();
-            else
-                InitNormalRadar();
-
-            if (Radar.radarEnableLootConfig.Value)
-                UpdateLootList();
-
-            UpdateMineList();
-            UpdateExfiltrationPointList();
-        }
-
-        private void UpdateExfiltrationPointList()
-        {
-            foreach (var obj in _exfiltrationObject)
-            {
-                if (obj != null)
-                {
-                    obj.DestroyBlip();
-                }
-            }
-            _exfiltrationObject.Clear();
-
-            if (!Radar.radarEnableExfilConfig.Value)
-            {
-                return;
-            }
-
-            var zones = LocationScene.GetAllObjects<ExfiltrationPoint>().ToArray();
-            foreach (var zone in zones)
-            {
-                Debug.LogError($"EXFIL: {zone.Status} {zone.Settings.Name} {zone.InfiltrationMatch(_player)} {zone.transform.position} {_player.Transform.position}");
-                BlipOther? blip = null;
-                if (zone.InfiltrationMatch(_player))
-                {
-                    blip = new BlipOther(zone.Id, zone.transform, false, 3);
-                }
-                else
-                {
-                    continue;
-                }
-                _exfiltrationObject.Add(blip);
-            }
-
-            var transits = LocationScene.GetAllObjects<TransitPoint>().ToArray();
-            foreach (var transit in transits)
-            {
-                Debug.LogError($"TRANS: {transit.Enabled} {transit.name} {transit.transform.position} {_player.Transform.position}");
-                BlipOther? blip = null;
-                blip = new BlipOther(transit.name, transit.transform, false, 4);
-                _exfiltrationObject.Add(blip);
-            }
-        }
-
-        private void UpdateMineList()
-        {
-            foreach (var obj in _mineRegion)
-            {
-                if (obj != null)
-                {
-                    obj.Destroy();
-                }
-            }
-            foreach (var obj in _mineObject)
-            {
-                if (obj != null)
-                {
-                    obj.DestroyBlip();
-                }
-            }
-            _mineRegion.Clear();
-            _mineObject.Clear();
-            if (!Radar.radarEnableMinefieldConfig.Value)
-            {
-                return;
-            }
-            foreach (var mine in _gameWorld.MineManager.Mines)
-            {
-                var blip = new BlipOther(mine.GetInstanceID().ToString(), mine.transform, false, 1);
-                _mineObject.Add(blip);
-            }
-
-            var zones = LocationScene.GetAllObjects<BorderZone>().ToArray();
-            foreach (var zone in zones)
-            {
-                //Debug.LogError($"Zone type: {zone.GetType().Name}");
-                if (zone.GetType().Name == "Minefield")
-                {
-                    // 4.1.1 changed these from protected to public, so both flags are needed.
-                    FieldInfo triggerZoneSettingsField = typeof(BorderZone)
-                        .GetField("_triggerZoneSettings", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-
-                    FieldInfo extentsField = typeof(BorderZone)
-                        .GetField("_extents", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-
-                    if (triggerZoneSettingsField == null || extentsField == null)
-                    {
-                        throw new InvalidOperationException("Required fields _triggerZoneSettings or _extents were not found in BorderZone.");
-                    }
-
-                    Vector4 triggerZoneSettings = (Vector4)triggerZoneSettingsField.GetValue(zone);
-                    Vector3 extents = (Vector3)extentsField.GetValue(zone);
-                    
-
-                    Transform transform = zone.transform;
-                    Vector3 scale = transform.lossyScale;
-
-                    Vector3 localScale = transform.localScale;
-                    Vector3 worldExtents = new Vector3(
-                        extents.x * localScale.x,
-                        extents.y * localScale.y,
-                        extents.z * localScale.z
-                    );
-
-                    // Calculate min/max XZ offsets in local space (taking triggerZoneSettings into account)
-                    float minXOffset = -extents.x + triggerZoneSettings.y / scale.x;
-                    float maxXOffset = extents.x - triggerZoneSettings.x / scale.x;
-                    float minZOffset = -extents.z + triggerZoneSettings.w / scale.z;
-                    float maxZOffset = extents.z - triggerZoneSettings.z / scale.z;
-
-                    // Define 4 corners in local space (before rotation)
-                    Vector3[] localCorners = new Vector3[]
-                    {
-                        new Vector3(minXOffset, 0, minZOffset),
-                        new Vector3(minXOffset, 0, maxZOffset),
-                        new Vector3(maxXOffset, 0, maxZOffset),
-                        new Vector3(maxXOffset, 0, minZOffset),
-                    };
-
-                    // Rotate and translate to world space
-                    Vector3[] worldCorners = new Vector3[4];
-                    for (int i = 0; i < 4; i++)
-                    {
-                        worldCorners[i] = transform.TransformPoint(localCorners[i]);
-                    }
-
-                    var region = new RadarRegion(worldCorners);
-                    _mineRegion.Add(region);
-                }
-            }
-        }
-
-        private void InitNormalRadar()
-        {
-            if (debugInfo)
-                Debug.LogError("# InitNormalRadar");
-
-            _compassGlass = null;
-            if (_radarCanvas != null)
-            {
-                _radarCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
-                _radarCanvas.worldCamera = null;
-            }
-
-            transform.SetParent(_fpsCameraObject.transform);
-
-            transform.rotation = Quaternion.identity;
-            RadarBaseTransform.position = new Vector2(Radar.radarOffsetXConfig.Value, Radar.radarOffsetYConfig.Value);
-            RadarBaseTransform.rotation = Quaternion.identity;
-            RadarBaseTransform.localScale = _radarScaleStart * Radar.radarSizeConfig.Value;
-            RadarBorderTransform.rotation = Quaternion.identity;
-            RadarBase.SetActive(true);
-        }
-
-        public void SetCompassParent(bool enable)
-        {
-            transform.SetParent(enable && _compassGlass != null ? _compassGlass.transform : _fpsCameraObject.transform);
-        }
-
-        private void InitCompassRadar()
-        {
-            if (debugInfo)
-                Debug.LogError("# InitCompassRadar");
-
-            // Ensure the Canvas is set to World Space
-            if (_radarCanvas != null)
-            {
-                _radarCanvas.renderMode = RenderMode.WorldSpace;
-                _radarCanvas.worldCamera = Camera.main;
-            }
-
-            // Set the parent of RadarHUD
-            SetCompassParent(true);
-            transform.localPosition = Vector3.zero;
-            transform.localRotation = Quaternion.identity;
-            RadarBaseTransform.localPosition = new Vector3(0, 0, 0.001f);
-            RadarBaseTransform.localRotation = Quaternion.Euler(0, -180, 0);
-            RadarBaseTransform.localScale = Vector3.one * 0.000123f;
-            RadarBorderTransform.localRotation = Quaternion.identity;
+            // Destroy() only takes effect at the end of the frame, so the bail-outs above still let
+            // OnEnable and Update run once. This gate keeps them from touching half-built state.
+            _ready = true;
+            RadarPlugin.Log.LogInfo("Radar loaded");
         }
 
         private void OnEnable()
         {
-            if (debugInfo)
-                Debug.LogError("# OnEnable");
+            if (!_ready) return;
 
             InitRadar();
-            Radar.Instance.Config.SettingChanged += UpdateRadarSettings;
-            UpdateRadarSettings();
-            inGame = true;
+            RadarPlugin.Instance.Config.SettingChanged += OnSettingChanged;
+            ApplyAllSettings();
+            InGame = true;
         }
 
         private void OnDisable()
         {
-            if (debugInfo)
-                Debug.LogError("# OnDisable");
+            if (!_ready) return;
 
-            Radar.Instance.Config.SettingChanged -= UpdateRadarSettings;
-
-            if (_pulseCoroutine != null)
-            {
-                StopCoroutine(_pulseCoroutine);
-                _pulseCoroutine = null;
-            }
-
-            inGame = false;
-        }
-
-        private void ClearLoot()
-        {
-            if (_lootTree != null)
-            {
-                _lootTree.Clear();
-                _lootTree = null;
-            }
-
-            if (_lootCustomObject.Count > 0)
-            {
-                foreach (var loot in _lootCustomObject)
-                    loot.DestroyBlip();
-
-                _lootCustomObject.Clear();
-            }
-
-            if (_lootInList != null)
-            {
-                _lootInList.Clear();
-            }
-        }
-
-        private void UpdateRadarSettings(object sender = null, SettingChangedEventArgs e = null)
-        {
-            if (!gameObject.activeInHierarchy) return; // Don't update if the radar object is disabled
-
-            _radarPulseInterval = Mathf.Max(1f, Radar.radarScanInterval.Value);
-
-            if (e == null || e.ChangedSetting == Radar.radarEnablePulseConfig)
-                TogglePulseAnimation(Radar.radarEnablePulseConfig.Value);
-
-            if (e != null && e.ChangedSetting == Radar.backgroundColor)
-            {
-                Color newColor = Radar.backgroundColor.Value;
-                _radarBorderImage.color = newColor;
-                _radarPulseImage.color = newColor;
-                _radarBackgroundImage.color = newColor;
-            }
-
-            if (e != null && e.ChangedSetting == Radar.radarEnableCompassConfig)
-                InitRadar();
-
-            if (e != null && e.ChangedSetting == Radar.radarEnableMinefieldConfig)
-                UpdateMineList();
-
-            if (e != null && e.ChangedSetting == Radar.radarEnableExfilConfig)
-                UpdateExfiltrationPointList();
-
-            if (e != null && e.ChangedSetting == Radar.minefieldColor)
-                RadarRegion.initColor = Radar.minefieldColor.Value;
-
-            if (!Radar.radarEnableCompassConfig.Value)
-            {
-                if (e == null || e.ChangedSetting == Radar.radarOffsetXConfig || e.ChangedSetting == Radar.radarOffsetYConfig)
-                {
-                    RadarBaseTransform.position = new Vector2(Radar.radarOffsetXConfig.Value, Radar.radarOffsetYConfig.Value);
-                }
-
-                if (e == null || e.ChangedSetting == Radar.radarSizeConfig)
-                    RadarBaseTransform.localScale = _radarScaleStart * Radar.radarSizeConfig.Value;
-            }
-
-            if (e != null && (e.ChangedSetting == Radar.radarEnableLootConfig || e.ChangedSetting == Radar.radarEnableWishlistLootConfig || e.ChangedSetting == Radar.radarLootPerSlotConfig))
-            {
-                if (Radar.radarEnableLootConfig.Value)
-                    UpdateLootList();
-                else
-                {
-                    ClearLoot();
-                }
-            }
-
-            if (e != null && (e.ChangedSetting == Radar.radarLootThreshold))
-            {
-                if (Radar.radarEnableLootConfig.Value)
-                    UpdateLootList();
-                else
-                {
-                    ClearLoot();
-                }
-            }
-        }
-
-        private void UpdateLootList()
-        {
-            ClearLoot();
-            float xMin = float.MaxValue, xMax = float.MinValue, yMin = float.MaxValue, yMax = float.MinValue;
-            var allItemOwner = _gameWorld.ItemOwners;
-
-            // Process containers and filter out duplicates
-            HashSet<Vector3> duplicatePositions = new HashSet<Vector3>();
-            foreach (var item in allItemOwner.Reverse())
-            {
-                if (item.Key.RootItem.Name.StartsWith(PLAYER_INVENTORY_PREFIX) || item.Value.Transform == null)
-                    continue;
-
-                // Handle duplicates
-                if (!item.Key.ContainerName.StartsWith(DRAWER_PREFIX) && !duplicatePositions.Add(item.Value.Transform.position))
-                    continue;
-
-                AddLoot(item.Key.ID, item.Key.Items.First(), item.Value.Transform);
-
-                // Set up event handlers for containers
-                if (item.Key.Items.First().IsContainer && _containerSet.Add(item.Key.ID))
-                {
-                    item.Key.RemoveItemEvent += (args) => OnContainerRemoveItemEvent(item.Key, args);
-                    item.Key.AddItemEvent += (args) => OnContainerAddItemEvent(item.Key, args);
-                    _containerTransforms[item.Key.ID] = item.Value.Transform;
-                }
-
-                // Track bounds for quadtree
-                Vector3 pos = item.Value.Transform.position;
-                xMin = Mathf.Min(xMin, pos.x);
-                xMax = Mathf.Max(xMax, pos.x);
-                yMin = Mathf.Min(yMin, pos.z);
-                yMax = Mathf.Max(yMax, pos.z);
-            }
-
-            // Create quadtree with padding
-            _lootTree = new Quadtree(Rect.MinMaxRect(xMin - 5, yMin - 2, xMax + 5, yMax + 2));
-            foreach (BlipOther loot in _lootCustomObject)
-                _lootTree.Insert(loot);
-        }
-
-        private void OnContainerAddItemEvent(IItemOwner itemOwner, AddItemEventArgs args)
-        {
-            bool itemIsWishlisted = CheckWishlist(args.Item);
-            bool itemIsValuable = CheckPrice(args.Item);
-            bool containerInList = _lootInList.Contains(itemOwner.ID);
-
-            // If new item is wishlisted or valuable
-            if (itemIsWishlisted || itemIsValuable)
-            {
-                if (!containerInList)
-                {
-                    // Container not in list, add it with appropriate priority
-                    AddLoot(itemOwner.ID, itemOwner.Items.First(), _containerTransforms[itemOwner.ID]);
-                }
-                else if (itemIsWishlisted)
-                {
-                    // Container already in list but new item is wishlisted - need to update priority
-                    bool containerHasWishlist = CheckWishlist(itemOwner.Items.First());
-                    if (containerHasWishlist)
-                    {
-                        // Update to wishlist priority (2) if not already
-                        UpdateLootPriority(itemOwner.ID, 2);
-                    }
-                }
-            }
-        }
-
-        private void OnContainerRemoveItemEvent(IItemOwner itemOwner, RemoveItemEventArgs args)
-        {
-            bool removedItemIsWishlisted = CheckWishlist(args.Item);
-            bool removedItemIsValuable = CheckPrice(args.Item);
-
-            if (!removedItemIsWishlisted && !removedItemIsValuable)
-                return;
-
-            // Check what's left in the container
-            bool containerStillHasWishlist = CheckWishlist(itemOwner.Items.First());
-            bool containerStillHasValue = CheckPrice(itemOwner.Items.First());
-
-            if (!containerStillHasWishlist && !containerStillHasValue)
-            {
-                // Nothing valuable left, remove from list
-                RemoveLoot(itemOwner.ID);
-            }
-            else if (removedItemIsWishlisted && !containerStillHasWishlist && containerStillHasValue)
-            {
-                // Removed wishlist item, only valuable items remain - downgrade priority to 0
-                UpdateLootPriority(itemOwner.ID, 0);
-            }
-        }
-
-        private bool CheckPrice(Item item)
-        {
-            int highestPrice = 0;
-
-            if (item.IsContainer)
-            {
-                var allItems = item.GetAllItems();
-
-                // Then calculate highest price
-                foreach (var subItem in allItems)
-                {
-                    int price = ItemExtensions.GetBestPrice(subItem);
-
-                    if (Radar.radarLootPerSlotConfig.Value)
-                    {
-                        var cellSize = subItem.CalculateCellSize();
-                        int slotCount = cellSize.X * cellSize.Y;
-                        if (slotCount > 0) // Avoid division by zero
-                            price /= slotCount;
-                    }
-
-                    highestPrice = Mathf.Max(highestPrice, price);
-                }
-            }
-            else
-            {
-                highestPrice = ItemExtensions.GetBestPrice(item);
-                if (Radar.radarLootPerSlotConfig.Value)
-                {
-                    var cellSize = item.CalculateCellSize();
-                    int slotCount = cellSize.X * cellSize.Y;
-                    if (slotCount > 0) // Avoid division by zero
-                        highestPrice /= slotCount;
-                }
-            }
-
-            return highestPrice > Radar.radarLootThreshold.Value;
-        }
-
-        private bool CheckWishlist(Item item)
-        {
-            if (item.IsContainer)
-            {
-                var allItems = item.GetAllItems();
-
-                foreach (var subItem in allItems)
-                {
-                    //Debug.LogError(subItem.Name);
-                    if (_wishlist.Keys.Contains(subItem.TemplateId))
-                    {
-                        if (_wishlist[subItem.TemplateId] == EWishlistGroup.Other)
-                            //Debug.LogError("Wishlisted");
-                            return true;
-                    }
-                }
-            }
-            else
-            {
-                if (_wishlist.Keys.Contains(item.TemplateId))
-                {
-                    if (_wishlist[item.TemplateId] == EWishlistGroup.Other)
-                        //Debug.LogError("Wishlisted");
-                        return true;
-                }
-            }
-
-            return false;
-        }
-
-        public void AddLoot(string id, Item item, Transform transform, bool lazyUpdate = false)
-        {
-            //Debug.LogError($"AddLoot {item.IsContainer} {item.Name} {item.LocalizedName()} {transform.position}");
-            bool isWishlisted = Radar.radarEnableWishlistLootConfig.Value && !item.Name.StartsWith(PLAYER_INVENTORY_PREFIX) && CheckWishlist(item);
-            bool isValuableItem = Radar.radarEnableLootConfig.Value && !item.Name.StartsWith(PLAYER_INVENTORY_PREFIX) && CheckPrice(item);
-
-            // Wishlist has highest priority (2), custom items and valuable items get priority 0
-            if (isWishlisted || isValuableItem)
-            {
-                int priority = isWishlisted ? 2 : 0;
-                var blip = new BlipOther(id, transform, lazyUpdate, priority);
-                _lootCustomObject.Add(blip);
-                _lootTree?.Insert(blip);
-                _lootInList.Add(id);
-            }
-        }
-
-        private void UpdateLootPriority(string id, int newPriority)
-        {
-            foreach (var loot in _lootCustomObject)
-            {
-                if (loot._id == id)
-                {
-                    loot.UpdatePriority(newPriority);
-                    break;
-                }
-            }
-        }
-
-        public void RemoveLoot(string id)
-        {
-            Vector2 point = Vector2.zero;
-            foreach (var loot in _lootCustomObject)
-            {
-                if (loot._id == id)
-                {
-                    point.x = loot.targetPosition.x;
-                    point.y = loot.targetPosition.z;
-                    loot.DestroyBlip();
-                    _lootCustomObject.Remove(loot);
-                    break;
-                }
-            }
-            //Debug.LogError($"Remove Loot: {id}");
-            _lootTree?.Remove(point, id);
-            _lootInList.Remove(id);
-        }
-
-        public void UpdateFireTime(string id)
-        {
-            if (_enemyList.ContainsKey(id))
-                _enemyList[id].UpdateLastFireTime(Time.time);
-        }
-
-        public void RemoveLootByKey(int key)
-        {
-            LootItem item = _gameWorld.LootItems.GetByKey(key);
-            RemoveLoot(item.ItemId);
-        }
-
-        private void TogglePulseAnimation(bool enable)
-        {
-            if (enable)
-            {
-                // always create a new coroutine
-                if (_pulseCoroutine != null)
-                    StopCoroutine(_pulseCoroutine);
-
-                _pulseCoroutine = StartCoroutine(PulseCoroutine());
-            }
-            else if (_pulseCoroutine != null && !enable)
-            {
-                StopCoroutine(_pulseCoroutine);
-                _pulseCoroutine = null;
-            }
-
-            _radarPulseTransform.gameObject.SetActive(enable);
+            RadarPlugin.Instance.Config.SettingChanged -= OnSettingChanged;
+            StopPulse();
+            InGame = false;
         }
 
         private void Update()
         {
-            if (_player == null) return;
+            if (!_ready || _player == null) return;
 
-            // Update border rotation when compass mode is disabled
-            if (!Radar.radarEnableCompassConfig.Value)
-                RadarBorderTransform.eulerAngles = new Vector3(0, 0, transform.parent.eulerAngles.y);
+            if (!RadarConfig.CompassEnabled.Value)
+                _layout.UpdateBorderRotation();
 
-            UpdateLoot();
-            UpdateRadar(UpdateActivePlayer() != -1);
+            _loot.Tick();
+            Render(positionUpdate: ScanPlayers());
 
-            if (Radar.radarEnableCompassConfig.Value)
-            {
-                HandleCompassMode();
-            }
+            if (RadarConfig.CompassEnabled.Value)
+                _layout.TickCompass();
         }
 
-        private void HandleCompassMode()
+        // --- Radar state -------------------------------------------------------------------------
+
+        private void InitRadar()
         {
-            var handsController = _player.HandsController as Player.FirearmController;
-            bool compassInHand = handsController?.CurrentCompassState ?? false;
-            // For some reason the above returns false even when compass is in hand
-            compassInHand = true;
+            _layout.Apply();
 
-            // Toggle compass state
+            if (RadarConfig.LootEnabled.Value)
+                _loot.Rebuild();
 
-            if (compassInHand != _compassOn)
+            _minefield.Rebuild();
+            _exfil.Rebuild();
+        }
+
+        /// <summary>
+        /// Registers any players that have appeared since the last sweep.
+        /// </summary>
+        /// <returns>False when the sweep was throttled, meaning blips should hold their position.</returns>
+        private bool ScanPlayers()
+        {
+            float interval = RadarConfig.FireModeEnabled.Value
+                ? FireModeScanInterval
+                : RadarConfig.ScanInterval.Value;
+
+            if (Time.time - _lastPlayerScanTime < interval)
+                return false;
+
+            _lastPlayerScanTime = Time.time;
+
+            IEnumerable<Player> allPlayers = _gameWorld.AllPlayersEverExisted;
+
+            // Everyone is already tracked apart from us, so there is nothing to register.
+            if (allPlayers.Count() == _players.Count + 1)
+                return true;
+
+            foreach (Player player in allPlayers)
             {
-                _compassOn = compassInHand;
-                RadarBase.SetActive(compassInHand);
-                SetCompassParent(compassInHand);
+                if (player == null || player == _player)
+                    continue;
+
+                if (!_players.ContainsKey(player.ProfileId))
+                    _players[player.ProfileId] = new BlipPlayer(player);
             }
 
-            // Attach to compass glass if needed
-            if (_compassOn && _compassGlass == null)
-            {
-                _compassGlass = GameObject.Find(COMPASS_GLASS_NAME);
-                if (_compassGlass != null && transform.parent != _compassGlass.transform)
-                {
-                    transform.SetParent(_compassGlass.transform, false);
-                    transform.localPosition = Vector3.zero;
-                    transform.localRotation = Quaternion.identity;
-                    transform.localScale = Vector3.one;
-                }
-            }
+            return true;
+        }
+
+        private void Render(bool positionUpdate)
+        {
+            Target.SetPlayerTransform(_player.Transform);
+            Target.SetRadarRange(RadarConfig.InnerRange.Value, RadarConfig.OuterRange.Value);
+            RadarRegion.SetPlayerPosition(_player.Transform.position);
+
+            foreach (BlipPlayer blip in _players.Values)
+                blip.Update(positionUpdate);
+
+            _loot.Render();
+            _minefield.Render();
+            _exfil.Render();
+        }
+
+        // --- Settings ----------------------------------------------------------------------------
+
+        /// <summary>Pushes every setting into the HUD, for start-up and after a mode switch.</summary>
+        private void ApplyAllSettings()
+        {
+            _pulseInterval = Mathf.Max(MinPulseInterval, RadarConfig.ScanInterval.Value);
+            TogglePulse(RadarConfig.PulseEnabled.Value);
+            _layout.ApplyPosition();
+            _layout.ApplyScale();
+        }
+
+        private void OnSettingChanged(object sender, SettingChangedEventArgs e)
+        {
+            // The HUD is torn down while the radar is toggled off; nothing to push settings into.
+            if (!gameObject.activeInHierarchy) return;
+
+            _pulseInterval = Mathf.Max(MinPulseInterval, RadarConfig.ScanInterval.Value);
+
+            ConfigEntryBase changed = e.ChangedSetting;
+
+            if (changed == RadarConfig.PulseEnabled)
+                TogglePulse(RadarConfig.PulseEnabled.Value);
+            else if (changed == RadarConfig.BackgroundColor)
+                _layout.SetBackgroundColor(RadarConfig.BackgroundColor.Value);
+            else if (changed == RadarConfig.CompassEnabled)
+                InitRadar();
+            else if (changed == RadarConfig.MinefieldEnabled)
+                _minefield.Rebuild();
+            else if (changed == RadarConfig.ExfilEnabled)
+                _exfil.Rebuild();
+            else if (changed == RadarConfig.MinefieldColor)
+                RadarRegion.FillColor = RadarConfig.MinefieldColor.Value;
+            else if (changed == RadarConfig.LootEnabled || changed == RadarConfig.WishlistLootEnabled ||
+                     changed == RadarConfig.LootValuePerSlot || changed == RadarConfig.LootThreshold)
+                RefreshLoot();
+            else if (changed == RadarConfig.OffsetX || changed == RadarConfig.OffsetY)
+                _layout.ApplyPosition();
+            else if (changed == RadarConfig.HudSize)
+                _layout.ApplyScale();
+        }
+
+        private void RefreshLoot()
+        {
+            if (RadarConfig.LootEnabled.Value)
+                _loot.Rebuild();
+            else
+                _loot.Clear();
+        }
+
+        // --- Pulse animation ---------------------------------------------------------------------
+
+        private void TogglePulse(bool enable)
+        {
+            StopPulse();
+
+            if (enable)
+                _pulseCoroutine = StartCoroutine(PulseCoroutine());
+
+            _layout.SetPulseVisible(enable);
+        }
+
+        private void StopPulse()
+        {
+            if (_pulseCoroutine == null) return;
+
+            StopCoroutine(_pulseCoroutine);
+            _pulseCoroutine = null;
         }
 
         private IEnumerator PulseCoroutine()
         {
             while (true)
             {
-                // Rotate from 360 to 0 over the animation duration
+                // One revolution per pulse interval, sweeping backwards from 360 to 0 degrees.
                 float t = 0f;
                 while (t < 1.0f)
                 {
-                    t += Time.deltaTime / _radarPulseInterval;
-                    float angle = Mathf.Lerp(0f, 1f, 1 - t) * 360;
-
-                    // Apply the scale to all axes
-                    _radarPulseTransform.localEulerAngles = new Vector3(0, 0, angle);
+                    t += Time.deltaTime / _pulseInterval;
+                    _layout.SetPulseAngle((1f - t) * 360f);
                     yield return null;
                 }
-                // Pause for the specified duration
-                // yield return new WaitForSeconds(interval);
-            }
-        }
-
-        private long UpdateActivePlayer()
-        {
-            float interval = Radar.radarScanInterval.Value;
-            if (Radar.radarEnableFireModeConfig.Value)
-                interval = 0.1f;
-                
-            if (Time.time - RadarLastUpdateTime < interval)
-                return -1;
-            else
-                RadarLastUpdateTime = Time.time;
-            IEnumerable<Player> allPlayers = _gameWorld.AllPlayersEverExisted;
-
-            if (allPlayers.Count() == _enemyList.Count + 1)
-                return -2;
-
-            foreach (Player enemyPlayer in allPlayers)
-            {
-                if (enemyPlayer == null || enemyPlayer == _player)
-                    continue;
-
-                if (!_enemyList.ContainsKey(enemyPlayer.ProfileId))
-                    _enemyList.Add(enemyPlayer.ProfileId, new BlipPlayer(enemyPlayer));
-            }
-            return 0;
-        }
-
-        private void UpdateLoot()
-        {
-            if (Time.time - RadarLastUpdateTime < Radar.radarScanInterval.Value)
-                return;
-
-            Vector2 center = new Vector2(_player.Transform.position.x, _player.Transform.position.z);
-            var latestActiveLootOnRadar = _lootTree?.QueryRange(center, Radar.radarOuterRangeConfig.Value);
-            _lootToHide.Clear();
-            if (_activeLootOnRadar != null)
-            {
-                foreach (var old in _activeLootOnRadar)
-                {
-                    if (latestActiveLootOnRadar == null || !latestActiveLootOnRadar.Contains(old))
-                        _lootToHide.Add(old);
-                }
-            }
-
-            _activeLootOnRadar?.Clear();
-            _activeLootOnRadar = latestActiveLootOnRadar;
-        }
-
-        private void UpdateRadar(bool positionUpdate = true)
-        {
-            Target.setPlayerTransform(_player.Transform);
-            Target.setRadarRange(Radar.radarInnerRangeConfig.Value, Radar.radarOuterRangeConfig.Value);
-            RadarRegion.setPlayerPosition(_player.Transform.position);
-            foreach (var obj in _enemyList)
-                obj.Value.Update(positionUpdate);
-
-            foreach (var obj in _lootToHide)
-                obj.Update(false);
-
-            foreach (var obj in _mineObject)
-                obj.Update(true);
-
-            foreach (var obj in _exfiltrationObject)
-                obj.Update(true);
-
-            foreach (var obj in _mineRegion)
-                obj.UpdateVisual();
-
-            if (_activeLootOnRadar != null)
-            {
-                foreach (var obj in _activeLootOnRadar)
-                    obj.Update(true);
             }
         }
     }
