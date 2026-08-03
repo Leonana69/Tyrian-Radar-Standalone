@@ -225,11 +225,12 @@ namespace Radar
                 //Debug.LogError($"Zone type: {zone.GetType().Name}");
                 if (zone.GetType().Name == "Minefield")
                 {
+                    // 4.1.1 changed these from protected to public, so both flags are needed.
                     FieldInfo triggerZoneSettingsField = typeof(BorderZone)
-                        .GetField("_triggerZoneSettings", BindingFlags.NonPublic | BindingFlags.Instance);
+                        .GetField("_triggerZoneSettings", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
 
                     FieldInfo extentsField = typeof(BorderZone)
-                        .GetField("_extents", BindingFlags.NonPublic | BindingFlags.Instance);
+                        .GetField("_extents", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
 
                     if (triggerZoneSettingsField == null || extentsField == null)
                     {
