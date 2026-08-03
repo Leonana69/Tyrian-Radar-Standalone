@@ -3,7 +3,7 @@
 	<PropertyGroup>
 		<TargetFramework>net48</TargetFramework>
 		<AssemblyName>Tyrian-Radar</AssemblyName>
-		<DependencyVersion>4.0.0</DependencyVersion>
+		<DependencyVersion>4.1.1</DependencyVersion>
 		<Nullable>enable</Nullable>
 		<!-- Show build version in file properties -->
         <Version>1.2.1</Version>

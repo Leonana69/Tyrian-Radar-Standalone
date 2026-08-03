@@ -1,7 +1,8 @@
-﻿using System.Reflection;
-using SPT.Reflection.Patching;
-using EFT;
+﻿using EFT;
+using EFT.InventoryLogic;
 using JetBrains.Annotations;
+using SPT.Reflection.Patching;
+using System.Reflection;
 using UnityEngine;
 
 namespace Radar.Patches
@@ -14,7 +15,7 @@ namespace Radar.Patches
         }
 
         [PatchPostfix]
-        static void PostFix(Player __instance, [NotNull] GInterface322 weapon, Vector3 force)
+        static void PostFix(Player __instance, [NotNull] IWeapon weapon, Vector3 force)
         {
             //UnityEngine.Debug.LogError($"Patched Player {__instance == null}");
             var radarGo = InRaidRadarManager._radarGo;

@@ -19,16 +19,16 @@ using System.Text;
 
 internal static class TraderClassExtensions
 {
-    private static ISession Session = ClientAppUtils.GetMainApp().GetClientBackEndSession();
+    private static IEftSession Session = ClientAppUtils.GetMainApp().GetClientBackEndSession();
     public static bool IsInit = false;
-    public static async Task UpdateSupplyData(this TraderClass trader)
+    public static async Task UpdateSupplyData(this EFT.Trading.Trader trader)
     {
         try
         {
             Result<SupplyData> result = await Session.GetSupplyData(trader.Id);
             if (result.Succeed)
             {
-                trader.SupplyData_0 = result.Value;
+                trader._supplyData = result.Value;
             }
             else
             {
@@ -44,7 +44,7 @@ internal static class TraderClassExtensions
 
 internal static class FleaPriceCache
 {
-    private static ISession Session = ClientAppUtils.GetMainApp().GetClientBackEndSession();
+    private static IEftSession Session = ClientAppUtils.GetMainApp().GetClientBackEndSession();
     static Dictionary<string, CachePrice> cache = new Dictionary<string, CachePrice>();
     public static bool? valid;
 
@@ -147,7 +147,7 @@ internal struct CachePrice
 
 class ItemExtensions : MonoBehaviour
 {
-    public static ISession Session = ClientAppUtils.GetMainApp().GetClientBackEndSession();
+    public static IEftSession Session = ClientAppUtils.GetMainApp().GetClientBackEndSession();
     static Dictionary<string, float>? fleaCache = null;
     static Dictionary<string, int> traderCache = new Dictionary<string, int>();
 
@@ -216,15 +216,15 @@ class ItemExtensions : MonoBehaviour
         TraderClassExtensions.IsInit = true;
     }
 
-    public static TraderOffer? GetTraderOffer(Item item, TraderClass trader)
+    public static TraderOffer? GetTraderOffer(Item item, EFT.Trading.Trader trader)
     {
-        if (trader.SupplyData_0 != null)
+        if (trader._supplyData != null)
         {
             var result = trader.GetUserItemPrice(item);
             return result is null ? null : new(
                 trader.LocalizedName,
                 result.Value.Amount,
-                trader.Dictionary_0[result.Value.CurrencyId],
+                trader.CurrencyCourses[result.Value.CurrencyId],
                 item.StackObjectsCount
             );
         }

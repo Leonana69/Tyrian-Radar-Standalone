@@ -478,7 +478,7 @@ namespace Radar
                 _lootTree.Insert(loot);
         }
 
-        private void OnContainerAddItemEvent(IItemOwner itemOwner, GEventArgs2 args)
+        private void OnContainerAddItemEvent(IItemOwner itemOwner, AddItemEventArgs args)
         {
             bool itemIsWishlisted = CheckWishlist(args.Item);
             bool itemIsValuable = CheckPrice(args.Item);
@@ -505,7 +505,7 @@ namespace Radar
             }
         }
 
-        private void OnContainerRemoveItemEvent(IItemOwner itemOwner, GEventArgs3 args)
+        private void OnContainerRemoveItemEvent(IItemOwner itemOwner, RemoveItemEventArgs args)
         {
             bool removedItemIsWishlisted = CheckWishlist(args.Item);
             bool removedItemIsValuable = CheckPrice(args.Item);
