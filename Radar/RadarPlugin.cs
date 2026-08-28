@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace Radar
 {
-    [BepInPlugin("com.leonana69.radar", "Leonana69-Radar", "1.3.0")]
+    [BepInPlugin("com.leonana69.radar", "Leonana69-Radar", "1.3.3")]
     public class RadarPlugin : BaseUnityPlugin
     {
         internal static RadarPlugin Instance { get; private set; } = null!;
