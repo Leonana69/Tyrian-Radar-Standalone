@@ -52,7 +52,6 @@ namespace Radar
             var zones = LocationScene.GetAllObjects<BorderZone>().ToArray();
             foreach (var zone in zones)
             {
-                RadarPlugin.Log.LogError($"Found zone of type {zone.GetType().Name} at {zone.transform.position}");
                 if (zone.GetType().Name == "Minefield")
                 {
                     _regions.Add(new RadarRegion(BuildCorners(zone)));
